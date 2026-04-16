@@ -140,3 +140,115 @@ function setStageBadges(chart, badges) {
     chart.options.plugins.stageMarkers.badges = badges;
     chart.update();
 }
+
+function parseRoastTimestamp(value, anchorDate = null) {
+    if (!value) {
+        return null;
+    }
+
+    const direct = new Date(value);
+    if (!Number.isNaN(direct.getTime())) {
+        return direct;
+    }
+
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    const match = value.match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
+    if (!match) {
+        return null;
+    }
+
+    const base = anchorDate ? new Date(anchorDate) : new Date();
+    if (Number.isNaN(base.getTime())) {
+        return null;
+    }
+
+    base.setHours(Number(match[1]), Number(match[2]), Number(match[3]), 0);
+    return base;
+}
+
+function formatDuration(totalSeconds) {
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+        return "--";
+    }
+
+    const rounded = Math.round(totalSeconds);
+    const minutes = Math.floor(rounded / 60);
+    const seconds = rounded % 60;
+    const hours = Math.floor(minutes / 60);
+    const displayMinutes = minutes % 60;
+
+    if (hours > 0) {
+        return `${hours}:${String(displayMinutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    return `${displayMinutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatRate(value) {
+    if (!Number.isFinite(value)) {
+        return "--";
+    }
+
+    return `${value.toFixed(1)} °C/min`;
+}
+
+function buildRoastAnalytics(curve = [], events = [], options = {}) {
+    const anchorDate = options.anchorDate || options.startedAt || options.endedAt || null;
+    const startedAt = parseRoastTimestamp(options.startedAt, anchorDate);
+    const endedAt = parseRoastTimestamp(options.endedAt, anchorDate);
+    const firstCrack = events.find((event) => event.label === "First Crack");
+    const firstCrackAt = parseRoastTimestamp(firstCrack?.time, anchorDate);
+
+    const normalizedCurve = curve
+        .map((point, index) => {
+            const timestamp = parseRoastTimestamp(point.timestamp, anchorDate);
+            return {
+                index,
+                time: timestamp,
+                temperature: Number(point.temperature),
+            };
+        })
+        .filter((point) => point.time && Number.isFinite(point.temperature));
+
+    const startTime = startedAt || normalizedCurve[0]?.time || null;
+    const finishTime = endedAt || normalizedCurve[normalizedCurve.length - 1]?.time || null;
+    const totalDurationSeconds = startTime && finishTime
+        ? Math.max(0, (finishTime.getTime() - startTime.getTime()) / 1000)
+        : null;
+    const developmentSeconds = firstCrackAt && finishTime
+        ? Math.max(0, (finishTime.getTime() - firstCrackAt.getTime()) / 1000)
+        : null;
+
+    let peakTemperature = null;
+    let currentRor = null;
+
+    normalizedCurve.forEach((point) => {
+        peakTemperature = peakTemperature === null
+            ? point.temperature
+            : Math.max(peakTemperature, point.temperature);
+    });
+
+    if (normalizedCurve.length >= 2) {
+        const lastPoint = normalizedCurve[normalizedCurve.length - 1];
+        const previousPoint = normalizedCurve[normalizedCurve.length - 2];
+        const lastDeltaMinutes = (lastPoint.time.getTime() - previousPoint.time.getTime()) / 60000;
+        if (lastDeltaMinutes > 0) {
+            currentRor = (lastPoint.temperature - previousPoint.temperature) / lastDeltaMinutes;
+        }
+    }
+
+    const developmentRatio = totalDurationSeconds && developmentSeconds !== null
+        ? (developmentSeconds / totalDurationSeconds) * 100
+        : null;
+
+    return {
+        totalDurationSeconds,
+        developmentSeconds,
+        developmentRatio,
+        peakTemperature,
+        currentRor,
+    };
+}

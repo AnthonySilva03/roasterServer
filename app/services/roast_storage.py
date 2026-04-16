@@ -18,6 +18,8 @@ def init_db(app):
                 origin TEXT NOT NULL,
                 roast_level TEXT NOT NULL,
                 notes TEXT NOT NULL,
+                taste_notes TEXT NOT NULL DEFAULT '',
+                rating INTEGER,
                 sample_count INTEGER NOT NULL,
                 started_at TEXT NOT NULL,
                 ended_at TEXT NOT NULL,
@@ -39,6 +41,14 @@ def init_db(app):
             connection.execute(
                 "ALTER TABLE roast_sessions ADD COLUMN photo_data TEXT NOT NULL DEFAULT ''"
             )
+        if "taste_notes" not in existing_columns:
+            connection.execute(
+                "ALTER TABLE roast_sessions ADD COLUMN taste_notes TEXT NOT NULL DEFAULT ''"
+            )
+        if "rating" not in existing_columns:
+            connection.execute(
+                "ALTER TABLE roast_sessions ADD COLUMN rating INTEGER"
+            )
         connection.commit()
 
 
@@ -50,6 +60,8 @@ def save_roast_session(payload):
         payload["origin"].strip(),
         payload["roast_level"].strip(),
         payload.get("notes", "").strip(),
+        payload.get("taste_notes", "").strip(),
+        payload.get("rating"),
         len(curve),
         payload["started_at"],
         payload["ended_at"],
@@ -67,6 +79,8 @@ def save_roast_session(payload):
                 origin,
                 roast_level,
                 notes,
+                taste_notes,
+                rating,
                 sample_count,
                 started_at,
                 ended_at,
@@ -74,7 +88,7 @@ def save_roast_session(payload):
                 curve_json,
                 events_json,
                 photo_data
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             row,
         )
@@ -94,6 +108,8 @@ def list_roast_sessions(limit=8):
                 origin,
                 roast_level,
                 notes,
+                taste_notes,
+                rating,
                 sample_count,
                 started_at,
                 ended_at,
@@ -124,6 +140,8 @@ def get_roast_session(roast_id):
                 origin,
                 roast_level,
                 notes,
+                taste_notes,
+                rating,
                 sample_count,
                 started_at,
                 ended_at,
@@ -171,6 +189,27 @@ def get_roast_summary():
     summary = dict(counts)
     summary["levels"] = [dict(row) for row in level_rows]
     return summary
+
+
+def update_roast_feedback(roast_id, payload):
+    rating = payload.get("rating")
+    taste_notes = str(payload.get("taste_notes", "")).strip()
+
+    with sqlite3.connect(_database_path()) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE roast_sessions
+            SET rating = ?, taste_notes = ?
+            WHERE id = ?
+            """,
+            (rating, taste_notes, roast_id),
+        )
+        connection.commit()
+
+    if cursor.rowcount == 0:
+        return None
+
+    return get_roast_session(roast_id)
 
 
 def _database_path(app=None):

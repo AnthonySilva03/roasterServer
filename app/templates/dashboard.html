@@ -70,6 +70,39 @@
     <section class="content-grid wide-left">
         <article class="panel panel-pad detail-stack">
             <div>
+                <h2 class="section-title">Global Roast Origins</h2>
+                <p class="helper-text" id="originMapSummary">Loading saved roast origins onto the world map.</p>
+            </div>
+            <div class="origin-map-card">
+                <svg id="originWorldMap" class="origin-world-map" viewBox="0 0 1000 500" aria-label="World map of roast origins">
+                    <rect x="0" y="0" width="1000" height="500" rx="28" class="origin-map-ocean"></rect>
+                    <path class="origin-map-land" d="M90 150 L170 110 L245 120 L300 150 L330 205 L288 250 L208 262 L122 236 L80 188 Z"></path>
+                    <path class="origin-map-land" d="M248 270 L286 288 L302 352 L286 420 L246 460 L218 442 L210 392 L222 334 Z"></path>
+                    <path class="origin-map-land" d="M440 120 L540 94 L650 104 L738 134 L832 148 L890 190 L850 232 L792 242 L722 218 L662 230 L602 204 L532 196 L462 188 L420 154 Z"></path>
+                    <path class="origin-map-land" d="M570 236 L624 250 L660 286 L676 332 L652 370 L626 422 L582 440 L550 412 L536 362 L544 316 Z"></path>
+                    <path class="origin-map-land" d="M802 318 L846 334 L892 362 L930 392 L902 426 L848 422 L810 392 L790 350 Z"></path>
+                </svg>
+                <div id="originMapMarkers" class="origin-map-markers"></div>
+            </div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="summary-block">
+                <div class="metric-label">Mapped Origins</div>
+                <div id="originMapCount" class="summary-number">0</div>
+            </div>
+            <div class="summary-block">
+                <div class="metric-label">Origin Rollup</div>
+                <div id="originMapLegend" class="history-list">
+                    <div class="empty-state">Origin markers will appear after roast sessions load.</div>
+                </div>
+            </div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel panel-pad detail-stack">
+            <div>
                 <h2 class="section-title">Hardware Health</h2>
                 <p class="helper-text" id="hardwareHealthSummary">Checking Raspberry Pi sensor and servo health.</p>
             </div>

@@ -66,6 +66,44 @@ data-roast-level="{{ roast_level }}"
     </section>
 
     <section class="content-grid wide-left">
+        <article class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="section-title">Roast Analytics</h2>
+                <p class="helper-text">Track roast duration, development time, and rate-of-rise as the batch progresses.</p>
+            </div>
+            <div class="summary-grid analytics-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Roast Duration</div>
+                    <div id="analyticsDuration" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Current RoR</div>
+                    <div id="analyticsCurrentRor" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Development Time</div>
+                    <div id="analyticsDevelopment" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Development Ratio</div>
+                    <div id="analyticsDevelopmentRatio" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Peak Temperature</div>
+                    <div id="analyticsPeakTemperature" class="summary-number">--</div>
+                </div>
+            </div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="summary-block">
+                <div class="metric-label">Analytics Notes</div>
+                <div id="analyticsCopy" class="detail-copy">Start the roast to begin calculating analytics.</div>
+            </div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
         <article class="panel panel-pad detail-stack" id="roastHardwarePanel">
             <div>
                 <h2 class="section-title">Hardware Health</h2>

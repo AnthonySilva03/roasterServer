@@ -26,6 +26,12 @@ const roastHardwareModeEl = document.getElementById("roastHardwareMode");
 const roastHardwareErrorEl = document.getElementById("roastHardwareError");
 const roastLatestIssueEl = document.getElementById("roastLatestIssue");
 const roastLatestIssueTextEl = document.getElementById("roastLatestIssueText");
+const analyticsDurationEl = document.getElementById("analyticsDuration");
+const analyticsCurrentRorEl = document.getElementById("analyticsCurrentRor");
+const analyticsDevelopmentEl = document.getElementById("analyticsDevelopment");
+const analyticsDevelopmentRatioEl = document.getElementById("analyticsDevelopmentRatio");
+const analyticsPeakTemperatureEl = document.getElementById("analyticsPeakTemperature");
+const analyticsCopyEl = document.getElementById("analyticsCopy");
 
 const roastChart = createLineChart("temperatureChart", "Temperature", "#b4542b");
 const roastCurve = [];
@@ -72,6 +78,40 @@ function renderEvents() {
             <div class="history-meta">${event.detail}</div>
         </article>
     `).join("");
+}
+
+function renderAnalytics() {
+    const analytics = buildRoastAnalytics(roastCurve, roastEvents, {
+        startedAt: roastStartedAt || preRoastAt,
+        endedAt: roastFinished ? currentTimestamp() : null,
+    });
+
+    analyticsDurationEl.textContent = formatDuration(analytics.totalDurationSeconds);
+    analyticsCurrentRorEl.textContent = formatRate(analytics.currentRor);
+    analyticsDevelopmentEl.textContent = formatDuration(analytics.developmentSeconds);
+    analyticsDevelopmentRatioEl.textContent = analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio)
+        ? `${analytics.developmentRatio.toFixed(0)}%`
+        : "--";
+    analyticsPeakTemperatureEl.textContent = Number.isFinite(analytics.peakTemperature)
+        ? `${analytics.peakTemperature.toFixed(1)} °C`
+        : "--";
+
+    if (!roastCurve.length) {
+        analyticsCopyEl.textContent = "Start the roast to begin calculating analytics.";
+        return;
+    }
+
+    if (!roastStartedAt) {
+        analyticsCopyEl.textContent = "Pre-roast samples are collecting. Mark Start to track roast duration from charge.";
+        return;
+    }
+
+    if (analytics.developmentSeconds === null) {
+        analyticsCopyEl.textContent = "Development metrics will appear after you mark First Crack.";
+        return;
+    }
+
+    analyticsCopyEl.textContent = `Development phase is ${formatDuration(analytics.developmentSeconds)} so far and the current rise rate is ${formatRate(analytics.currentRor)}.`;
 }
 
 function rebuildStageMarkers() {
@@ -124,6 +164,7 @@ function clearRoastGraph() {
     roastChart.data.datasets[0].data = [];
     roastChart.update();
     rebuildStageMarkers();
+    renderAnalytics();
 }
 
 function updateLiveTemperature(data) {
@@ -151,6 +192,7 @@ function captureTemperature(data) {
         roastSessionMaxPoints
     );
     rebuildStageMarkers();
+    renderAnalytics();
 }
 
 function beginRecording(fromPreRoast) {
@@ -169,6 +211,17 @@ function buildPendingRoastPayload() {
     const stageNotes = roastEvents
         .map((event) => `${event.time} - ${event.label}: ${event.detail}`)
         .join("\n");
+    const analytics = buildRoastAnalytics(roastCurve, roastEvents, {
+        startedAt,
+        endedAt,
+    });
+    const analyticsNotes = [
+        `Roast duration: ${formatDuration(analytics.totalDurationSeconds)}`,
+        `Development time: ${formatDuration(analytics.developmentSeconds)}`,
+        `Development ratio: ${analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio) ? `${analytics.developmentRatio.toFixed(0)}%` : "--"}`,
+        `Current RoR at finish: ${formatRate(analytics.currentRor)}`,
+        `Peak temperature: ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}`,
+    ].join("\n");
 
     return {
         bean_name: beanName,
@@ -180,6 +233,7 @@ function buildPendingRoastPayload() {
         notes: [
             `Pre-roast used: ${explicitPreRoast ? "yes" : "no"}`,
             `Final speed setting: ${speedControlEl.value}%`,
+            analyticsNotes,
             stageNotes,
         ].filter(Boolean).join("\n"),
         curve: roastCurve,
@@ -342,6 +396,7 @@ finishRoastButtonEl.addEventListener("click", () => {
 });
 
 renderEvents();
+renderAnalytics();
 loadRoastHardwareHealth().catch(() => {
     roastHealthSummaryEl.textContent = "Unable to fetch hardware health right now.";
     roastHardwareErrorEl.textContent = "Health endpoint unavailable.";

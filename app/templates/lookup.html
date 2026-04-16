@@ -37,52 +37,99 @@
         </aside>
     </section>
 
-    <section class="content-grid wide-left">
-        <aside class="panel panel-pad">
-            <h2 class="section-title">Saved Sessions</h2>
+    <section class="lookup-layout">
+        <aside class="panel panel-pad lookup-sidebar">
+            <div class="lookup-sidebar-top">
+                <div>
+                    <h2 class="section-title">Saved Sessions</h2>
+                    <p class="helper-text" id="lookupSearchSummary">Search your roast history by bean, origin, level, or saved date.</p>
+                </div>
+                <label>
+                    Lookup Search
+                    <input id="lookupSearchInput" type="search" placeholder="Search bean, origin, roast level...">
+                </label>
+            </div>
             <div id="lookupList" class="lookup-list">
                 <div class="empty-state">No roast sessions saved yet.</div>
             </div>
         </aside>
 
-        <article class="panel panel-pad detail-stack">
-            <div>
-                <h2 class="detail-title" id="detailTitle">Choose a roast session</h2>
-                <p class="detail-copy" id="detailCopy">The selected roast’s notes, timing, and saved curve will appear here.</p>
+        <article class="panel panel-pad detail-stack lookup-detail-panel">
+            <div class="lookup-detail-header">
+                <div>
+                    <h2 class="detail-title" id="detailTitle">Choose a roast session</h2>
+                    <p class="detail-copy" id="detailCopy">The selected roast’s notes, timing, and saved curve will appear here.</p>
+                </div>
+                <div class="lookup-detail-tags">
+                    <div class="status-pill">Origin: <span id="detailOrigin">--</span></div>
+                    <div class="status-pill">Level: <span id="detailLevel">--</span></div>
+                    <div class="status-pill">Samples: <span id="detailSamples">--</span></div>
+                </div>
+                <div class="inline-controls">
+                    <a id="editTasteFeedbackLink" class="secondary button-link" href="{{ url_for('main.lookup_page') }}">Edit Tasting Feedback</a>
+                </div>
             </div>
-            <div class="three-grid">
+
+            <article class="panel chart-card lookup-chart-stage">
+                <div class="lookup-chart-header">
+                    <div>
+                        <h3 class="chart-title">Saved Temperature Curve</h3>
+                        <p class="helper-text">The chart leads the roast detail view so stage timing and temperature shape are easier to read.</p>
+                    </div>
+                </div>
+                <canvas id="lookupTemperatureChart"></canvas>
+            </article>
+
+            <div class="summary-grid analytics-grid">
                 <div class="summary-block">
-                    <div class="metric-label">Origin</div>
-                    <div id="detailOrigin">--</div>
+                    <div class="metric-label">Roast Duration</div>
+                    <div id="detailDuration" class="summary-number">--</div>
                 </div>
                 <div class="summary-block">
-                    <div class="metric-label">Roast Level</div>
-                    <div id="detailLevel">--</div>
+                    <div class="metric-label">Development Time</div>
+                    <div id="detailDevelopment" class="summary-number">--</div>
                 </div>
                 <div class="summary-block">
-                    <div class="metric-label">Samples</div>
-                    <div id="detailSamples">--</div>
+                    <div class="metric-label">Development Ratio</div>
+                    <div id="detailDevelopmentRatio" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Current RoR</div>
+                    <div id="detailCurrentRor" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Peak Temperature</div>
+                    <div id="detailPeakTemperature" class="summary-number">--</div>
                 </div>
             </div>
-            <div class="summary-block">
-                <div class="metric-label">Notes</div>
-                <div id="detailNotes" class="detail-copy">No roast selected.</div>
-            </div>
-            <div id="detailPhotoWrap" class="summary-block" style="display: none;">
-                <div class="metric-label">Roast Photo</div>
-                <img id="detailPhoto" alt="Saved roast" class="photo-preview">
-            </div>
-            <div class="summary-block">
-                <div class="metric-label">Stage Events</div>
-                <div id="detailEvents" class="history-list">
-                    <div class="empty-state">No event markers saved.</div>
+
+            <div class="lookup-detail-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Cup Rating</div>
+                    <div id="detailRating" class="summary-number">--</div>
                 </div>
-            </div>
-            <div class="two-grid">
-                <article class="panel chart-card">
-                    <h3 class="chart-title">Saved Temperature Curve</h3>
-                    <canvas id="lookupTemperatureChart"></canvas>
-                </article>
+                <div class="summary-block">
+                    <div class="metric-label">Taste Notes</div>
+                    <div id="detailTasteNotes" class="detail-copy">Taste notes can be added from the post-roast edit page.</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Analytics Summary</div>
+                    <div id="detailAnalyticsCopy" class="detail-copy">Select a roast session to view analytics.</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Notes</div>
+                    <div id="detailNotes" class="detail-copy">No roast selected.</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Stage Events</div>
+                    <div id="detailEvents" class="history-list">
+                        <div class="empty-state">No event markers saved.</div>
+                    </div>
+                </div>
+                <div id="detailPhotoWrap" class="summary-block" style="display: none;">
+                    <div class="metric-label">Roast Photo</div>
+                    <img id="detailPhoto" alt="Saved roast" class="photo-preview">
+                </div>
             </div>
         </article>
     </section>

@@ -14,6 +14,10 @@ const calendarMonthSummaryEl = document.getElementById("calendarMonthSummary");
 const calendarPrevButtonEl = document.getElementById("calendarPrevButton");
 const calendarTodayButtonEl = document.getElementById("calendarTodayButton");
 const calendarNextButtonEl = document.getElementById("calendarNextButton");
+const originMapSummaryEl = document.getElementById("originMapSummary");
+const originMapMarkersEl = document.getElementById("originMapMarkers");
+const originMapCountEl = document.getElementById("originMapCount");
+const originMapLegendEl = document.getElementById("originMapLegend");
 const temperatureHealthEl = document.getElementById("temperatureHealth");
 const servoHealthEl = document.getElementById("servoHealth");
 const hardwareSpeedEl = document.getElementById("hardwareSpeed");
@@ -24,6 +28,35 @@ const hardwareHealthSummaryEl = document.getElementById("hardwareHealthSummary")
 let dashboardRoasts = [];
 let currentMonth = new Date();
 let selectedDateKey = null;
+
+const originCoordinateMap = {
+    brazil: { lat: -14.2, lng: -51.9 },
+    colombia: { lat: 4.6, lng: -74.1 },
+    costa_rica: { lat: 9.9, lng: -84.2 },
+    guatemala: { lat: 15.7, lng: -90.2 },
+    honduras: { lat: 14.8, lng: -86.2 },
+    nicaragua: { lat: 12.9, lng: -85.2 },
+    mexico: { lat: 23.6, lng: -102.5 },
+    peru: { lat: -9.2, lng: -75.0 },
+    ethiopia: { lat: 9.1, lng: 40.5 },
+    kenya: { lat: 0.1, lng: 37.9 },
+    rwanda: { lat: -1.9, lng: 29.9 },
+    burundi: { lat: -3.4, lng: 29.9 },
+    tanzania: { lat: -6.4, lng: 34.9 },
+    uganda: { lat: 1.4, lng: 32.3 },
+    yemen: { lat: 15.6, lng: 48.5 },
+    india: { lat: 20.6, lng: 78.9 },
+    vietnam: { lat: 14.1, lng: 108.3 },
+    indonesia: { lat: -2.5, lng: 118.0 },
+    sumatra: { lat: -0.6, lng: 101.3 },
+    java: { lat: -7.5, lng: 110.0 },
+    panama: { lat: 8.5, lng: -80.0 },
+    ecuador: { lat: -1.8, lng: -78.2 },
+    bolivia: { lat: -16.3, lng: -63.6 },
+    china: { lat: 35.8, lng: 104.1 },
+    papua_new_guinea: { lat: -6.3, lng: 147.0 },
+    el_salvador: { lat: 13.8, lng: -88.9 },
+};
 
 function setDashboardMetrics(data) {
     latestTemperatureEl.textContent = `${Number(data.temperature).toFixed(1)} °C`;
@@ -52,6 +85,101 @@ function formatHumanDate(dateValue) {
         day: "numeric",
         year: "numeric",
     });
+}
+
+function normalizeOriginKey(origin) {
+    const value = String(origin || "").toLowerCase();
+    const replacements = [
+        ["costa rica", "costa_rica"],
+        ["el salvador", "el_salvador"],
+        ["papua new guinea", "papua_new_guinea"],
+    ];
+
+    for (const [needle, key] of replacements) {
+        if (value.includes(needle)) {
+            return key;
+        }
+    }
+
+    const countries = Object.keys(originCoordinateMap);
+    const matched = countries.find((country) => value.includes(country.replace(/_/g, " ")));
+    if (matched) {
+        return matched;
+    }
+
+    const tail = value.split(",").map((part) => part.trim()).filter(Boolean).pop() || value.trim();
+    return tail.replace(/[^a-z]+/g, "_");
+}
+
+function projectOriginCoordinate(point) {
+    const left = ((point.lng + 180) / 360) * 100;
+    const top = ((90 - point.lat) / 180) * 100;
+    return { left, top };
+}
+
+function renderOriginMap() {
+    if (!dashboardRoasts.length) {
+        originMapSummaryEl.textContent = "Save roasts to start plotting roasted origins around the world.";
+        originMapCountEl.textContent = "0";
+        originMapMarkersEl.innerHTML = "";
+        originMapLegendEl.innerHTML = '<div class="empty-state">Origin markers will appear after roast sessions load.</div>';
+        return;
+    }
+
+    const groupedOrigins = dashboardRoasts.reduce((accumulator, roast) => {
+        const key = normalizeOriginKey(roast.origin);
+        if (!originCoordinateMap[key]) {
+            return accumulator;
+        }
+
+        if (!accumulator[key]) {
+            accumulator[key] = {
+                label: roast.origin,
+                count: 0,
+                point: originCoordinateMap[key],
+            };
+        }
+
+        accumulator[key].count += 1;
+        return accumulator;
+    }, {});
+
+    const mappedOrigins = Object.values(groupedOrigins).sort((left, right) => right.count - left.count);
+    originMapCountEl.textContent = String(mappedOrigins.length);
+
+    if (!mappedOrigins.length) {
+        originMapSummaryEl.textContent = "Saved origins have not matched a map coordinate yet.";
+        originMapMarkersEl.innerHTML = "";
+        originMapLegendEl.innerHTML = '<div class="empty-state">No mapped origins yet. Try saving roasts with country names in the origin field.</div>';
+        return;
+    }
+
+    originMapSummaryEl.textContent = `${mappedOrigins.length} mapped origin${mappedOrigins.length === 1 ? "" : "s"} from ${dashboardRoasts.length} saved roast session${dashboardRoasts.length === 1 ? "" : "s"}.`;
+
+    originMapMarkersEl.innerHTML = mappedOrigins.map((origin) => {
+        const placement = projectOriginCoordinate(origin.point);
+        return `
+            <button
+                type="button"
+                class="origin-marker"
+                style="left: ${placement.left}%; top: ${placement.top}%;"
+                title="${origin.label} (${origin.count})"
+            >
+                <span class="origin-marker-dot"></span>
+                <span class="origin-marker-label">${origin.label.split(",").pop().trim()}</span>
+            </button>
+        `;
+    }).join("");
+
+    originMapLegendEl.innerHTML = mappedOrigins.map((origin) => `
+        <article class="history-item">
+            <div class="history-topline">
+                <span>${origin.label}</span>
+                <span>${origin.count} roast${origin.count === 1 ? "" : "s"}</span>
+            </div>
+            <div class="history-meta">Mapped from saved roast origin data on the dashboard.</div>
+        </article>
+    `).join("");
 }
 
 function groupRoastsByDate(items) {
@@ -154,6 +282,7 @@ function renderCalendar() {
     });
 
     renderSelectedDay(groupedRoasts);
+    renderOriginMap();
 }
 
 function setHealthChip(element, ok, okText, failText) {

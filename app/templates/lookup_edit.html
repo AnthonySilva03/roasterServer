@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Tasting Notes | Roaster Server{% endblock %}
+{% block body_attrs %}data-roast-id="{{ roast_id }}"{% endblock %}
+
+{% block content %}
+<main class="page-grid">
+    <section class="hero-grid">
+        <article class="panel strong panel-pad">
+            <div class="eyebrow">Post-Roast Edit</div>
+            <h1 class="hero-title">Rate the cup after tasting the beans.</h1>
+            <p class="copy">
+                This page is reserved for post-roast feedback. Use it after brewing or cupping so
+                saved roasts can carry real tasting notes instead of guesses made during roasting.
+            </p>
+            <div id="editFeedbackMessage" class="message strong">Loading roast details...</div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="status-pill">Editing happens after roasting</div>
+            <div class="status-pill">Ratings use a 1 to 5 scale</div>
+            <div class="status-pill">Taste notes stay attached to the saved roast</div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="detail-title" id="editRoastTitle">Saved Roast</h2>
+                <p class="detail-copy" id="editRoastSubtitle">The selected roast summary will appear here.</p>
+            </div>
+
+            <div class="three-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Origin</div>
+                    <div id="editRoastOrigin">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Roast Level</div>
+                    <div id="editRoastLevel">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Current Rating</div>
+                    <div id="editRoastCurrentRating">Not rated</div>
+                </div>
+            </div>
+
+            <div class="summary-block">
+                <div class="metric-label">Existing Taste Notes</div>
+                <div id="editRoastCurrentNotes" class="detail-copy">No tasting notes saved yet.</div>
+            </div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="section-title">Cup Feedback</h2>
+                <p class="helper-text">Update this after you have brewed or cupped the coffee.</p>
+            </div>
+
+            <label>
+                Rating
+                <select id="tasteRatingInput">
+                    <option value="">Not rated yet</option>
+                    <option value="1">1 - Needs work</option>
+                    <option value="2">2 - Below target</option>
+                    <option value="3">3 - Solid daily roast</option>
+                    <option value="4">4 - Strong cup</option>
+                    <option value="5">5 - Exceptional</option>
+                </select>
+            </label>
+
+            <label>
+                Taste Notes
+                <textarea id="tasteNotesInput" placeholder="Describe sweetness, acidity, body, roast character, and anything you would change next time."></textarea>
+            </label>
+
+            <div class="form-actions">
+                <button class="primary" type="button" id="saveTasteFeedbackButton">Save Feedback</button>
+                <a class="ghost button-link" href="{{ url_for('main.lookup_page') }}">Back to Lookup</a>
+            </div>
+        </aside>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/lookup_edit.js') }}"></script>
+{% endblock %}

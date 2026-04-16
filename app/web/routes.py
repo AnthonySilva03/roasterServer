@@ -8,6 +8,7 @@ from app.services.roast_storage import (
     get_roast_summary,
     list_roast_sessions,
     save_roast_session,
+    update_roast_feedback,
 )
 
 
@@ -63,6 +64,19 @@ def lookup_page():
     )
 
 
+@main.route("/lookup/<int:roast_id>/edit")
+def lookup_edit_page(roast_id):
+    roast = get_roast_session(roast_id)
+    if roast is None:
+        abort(404)
+
+    return render_template(
+        "lookup_edit.html",
+        active_page="lookup",
+        roast_id=roast_id,
+    )
+
+
 @main.route("/api/roasts", methods=["GET"])
 def get_roasts():
     limit_arg = request.args.get("limit", default="8")
@@ -80,6 +94,36 @@ def get_roast(roast_id):
     roast = get_roast_session(roast_id)
     if roast is None:
         abort(404)
+    return jsonify(roast)
+
+
+@main.route("/api/roasts/<int:roast_id>", methods=["PATCH"])
+def patch_roast(roast_id):
+    payload = request.get_json(silent=True) or {}
+    rating = payload.get("rating")
+    taste_notes = str(payload.get("taste_notes", "")).strip()
+
+    if rating in ("", None):
+        normalized_rating = None
+    else:
+        try:
+            normalized_rating = int(rating)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Rating must be a whole number from 1 to 5."}), 400
+
+        if normalized_rating < 1 or normalized_rating > 5:
+            return jsonify({"error": "Rating must be between 1 and 5."}), 400
+
+    roast = update_roast_feedback(
+        roast_id,
+        {
+            "rating": normalized_rating,
+            "taste_notes": taste_notes,
+        },
+    )
+    if roast is None:
+        abort(404)
+
     return jsonify(roast)
 
 

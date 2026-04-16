@@ -15,16 +15,22 @@ install deps
 run app
     |
     +--> open dashboard
+    |      |
+    |      v
+    |   origin map + hardware status
     |
     +--> start roast
     |      |
     |      v
-    |   review + photo
+    |   review + graph + photo
     |      |
     |      v
     |   save to database
     |
     +--> lookup saved roasts
+           |
+           v
+        edit cup feedback
 ```
 
 Helper commands are also available:
@@ -49,9 +55,11 @@ Or with the helper script:
 
 - If `pigpio` is unavailable, the app automatically uses simulated data.
 - The dashboard includes a hardware health panel backed by `GET /api/sensor/health`.
+- The dashboard also plots saved roast origins on a lightweight world map when origin text matches known countries.
 - The SQLite database is created automatically at `instance/roasts.db`.
 - Recent roast history is loaded from `GET /api/roasts`.
-- The dashboard sends roast saves to `POST /api/roasts`.
+- Roast review shows the actual graph curve that will be saved before the final `POST /api/roasts`.
+- Post-roast rating and tasting notes are updated later through `PATCH /api/roasts/<id>` from the dedicated lookup edit page.
 
 ## Useful Environment Variables
 
@@ -120,7 +128,7 @@ Useful checks:
 ```bash
 python -m compileall app run.py config.py
 python run.py
-pytest
+PYTHONPATH=. pytest
 curl http://127.0.0.1:5000/api/sensor/health
 ```
 
@@ -153,5 +161,7 @@ tests/test_app.py
   -> page renders
   -> roast create/detail
   -> roast summary
+  -> lookup edit page
+  -> roast feedback patch
   -> sensor health endpoint
 ```

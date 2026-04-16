@@ -5,11 +5,23 @@ const reviewOriginEl = document.getElementById("reviewOrigin");
 const reviewRoastLevelEl = document.getElementById("reviewRoastLevel");
 const reviewSampleCountEl = document.getElementById("reviewSampleCount");
 const reviewEventsEl = document.getElementById("reviewEvents");
+const reviewDurationEl = document.getElementById("reviewDuration");
+const reviewDevelopmentEl = document.getElementById("reviewDevelopment");
+const reviewDevelopmentRatioEl = document.getElementById("reviewDevelopmentRatio");
+const reviewCurrentRorEl = document.getElementById("reviewCurrentRor");
+const reviewPeakTemperatureEl = document.getElementById("reviewPeakTemperature");
+const reviewAnalyticsCopyEl = document.getElementById("reviewAnalyticsCopy");
 const saveRoastButtonEl = document.getElementById("saveRoastButton");
 const cancelRoastButtonEl = document.getElementById("cancelRoastButton");
 const photoInputEl = document.getElementById("photoInput");
 const photoPreviewWrapEl = document.getElementById("photoPreviewWrap");
 const photoPreviewEl = document.getElementById("photoPreview");
+
+const reviewTemperatureChart = createLineChart(
+    "reviewTemperatureChart",
+    "Roast Review Temperature",
+    "#b4542b"
+);
 
 let pendingRoast = null;
 
@@ -17,15 +29,57 @@ function renderPendingRoast() {
     if (!pendingRoast) {
         reviewMessageEl.textContent = "No roast is waiting for review.";
         reviewSubtitleEl.textContent = "Return to the roast page to begin a session.";
+        reviewAnalyticsCopyEl.textContent = "No analytics are available because no roast is waiting for review.";
+        reviewTemperatureChart.data.labels = [];
+        reviewTemperatureChart.data.datasets[0].data = [];
+        reviewTemperatureChart.update();
         return;
     }
+
+    const analytics = buildRoastAnalytics(pendingRoast.curve || [], pendingRoast.events || [], {
+        startedAt: pendingRoast.started_at,
+        endedAt: pendingRoast.ended_at,
+    });
 
     reviewTitleEl.textContent = pendingRoast.bean_name || "Pending Roast";
     reviewSubtitleEl.textContent = `Started ${new Date(pendingRoast.started_at).toLocaleString()} and finished ${new Date(pendingRoast.ended_at).toLocaleString()}.`;
     reviewOriginEl.textContent = pendingRoast.origin || "--";
     reviewRoastLevelEl.textContent = pendingRoast.roast_level || "--";
     reviewSampleCountEl.textContent = String((pendingRoast.curve || []).length);
+    reviewDurationEl.textContent = formatDuration(analytics.totalDurationSeconds);
+    reviewDevelopmentEl.textContent = formatDuration(analytics.developmentSeconds);
+    reviewDevelopmentRatioEl.textContent = analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio)
+        ? `${analytics.developmentRatio.toFixed(0)}%`
+        : "--";
+    reviewCurrentRorEl.textContent = formatRate(analytics.currentRor);
+    reviewPeakTemperatureEl.textContent = Number.isFinite(analytics.peakTemperature)
+        ? `${analytics.peakTemperature.toFixed(1)} °C`
+        : "--";
     reviewMessageEl.textContent = "Review the roast and choose Save or Cancel.";
+    reviewAnalyticsCopyEl.textContent = analytics.developmentSeconds !== null
+        ? `This review includes the graph that will be saved. Development ran ${formatDuration(analytics.developmentSeconds)} and the final rise rate was ${formatRate(analytics.currentRor)}.`
+        : "First crack was not marked, so development metrics are limited for this roast.";
+
+    reviewTemperatureChart.data.labels = (pendingRoast.curve || []).map((point) => point.timestamp);
+    reviewTemperatureChart.data.datasets[0].data = (pendingRoast.curve || []).map((point) => Number(point.temperature));
+    reviewTemperatureChart.update();
+    setStageMarkers(reviewTemperatureChart, []);
+    setStageBadges(
+        reviewTemperatureChart,
+        (pendingRoast.events || [])
+            .filter((event) => event.chart_label)
+            .map((event) => ({
+                label: event.chart_label,
+                text: event.label,
+                shortText: event.label
+                    .split(" ")
+                    .map((word) => word[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase(),
+                color: event.color || "#7f3417",
+            }))
+    );
 
     if (!(pendingRoast.events || []).length) {
         reviewEventsEl.innerHTML = '<div class="empty-state">No events captured.</div>';

@@ -41,6 +41,36 @@
                     <div id="reviewSampleCount">--</div>
                 </div>
             </div>
+            <div class="summary-grid analytics-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Roast Duration</div>
+                    <div id="reviewDuration" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Development Time</div>
+                    <div id="reviewDevelopment" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Development Ratio</div>
+                    <div id="reviewDevelopmentRatio" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Current RoR</div>
+                    <div id="reviewCurrentRor" class="summary-number">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Peak Temperature</div>
+                    <div id="reviewPeakTemperature" class="summary-number">--</div>
+                </div>
+            </div>
+            <article class="panel chart-card">
+                <h3 class="chart-title">Graph To Be Saved</h3>
+                <canvas id="reviewTemperatureChart"></canvas>
+            </article>
+            <div class="summary-block">
+                <div class="metric-label">Analytics Summary</div>
+                <div id="reviewAnalyticsCopy" class="detail-copy">Analytics will appear once roast data loads.</div>
+            </div>
             <div class="summary-block">
                 <div class="metric-label">Event Timeline</div>
                 <div id="reviewEvents" class="history-list">

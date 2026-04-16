@@ -8,7 +8,10 @@ Roaster Server is a Flask and Socket.IO dashboard for tracking live roast teleme
 - Falls back to simulated sensor data when Raspberry Pi hardware is unavailable.
 - Drives a Raspberry Pi servo speed controller during roasting when `pigpio` hardware mode is enabled.
 - Shows live hardware health on the dashboard using the sensor health API.
+- Plots saved roast origins on a global dashboard map when origin text matches supported countries.
 - Saves roast session metadata, event markers, optional photo data, and the current chart curve to `instance/roasts.db`.
+- Calculates roast analytics like duration, development time, peak temperature, and rate-of-rise from captured curves.
+- Supports post-roast cup ratings and tasting notes from a dedicated edit page after the beans are brewed or cupped.
 - Exposes simple HTTP endpoints for listing roasts, saving roasts, and checking hardware health.
 
 ## Visual Overview
@@ -31,7 +34,8 @@ Roaster Server is a Flask and Socket.IO dashboard for tracking live roast teleme
         v            v             v
    Dashboard      Roasting      Lookup
    calendar       live session  saved roasts
-   health panel   review flow   curve + photo
+   origin map     review graph  cup feedback
+   health panel   servo control curve + photo
 ```
 
 ## Project Layout
@@ -83,6 +87,7 @@ The app binds to `0.0.0.0:5000` by default, so it is reachable from your local n
 ```text
 /                Dashboard
                  - monthly roast calendar
+                 - global roast origin map
                  - hardware health
 
 /roast           Roast setup
@@ -93,17 +98,27 @@ The app binds to `0.0.0.0:5000` by default, so it is reachable from your local n
 /roast/session   Active roast
                  - live graph
                  - roast stage buttons
+                 - live roast analytics
                  - hardware widget
 
 /roast/review    Review before save
                  - summary
+                 - roast analytics
+                 - graph preview to be saved
                  - photo upload
                  - save or cancel
 
 /lookup          Saved roast explorer
                  - roast list
+                 - roast analytics
+                 - cup rating + tasting notes
                  - curve with event badges
                  - saved photo
+
+/lookup/<id>/edit
+                 - post-roast rating edit
+                 - tasting notes
+                 - feedback saved after cupping
 ```
 
 ### Shortcuts
@@ -137,7 +152,13 @@ pytest
 The test suite is split into:
 
 - `tests/test_sensor_service.py` for sensor reader behavior and `pigpio` handling.
-- `tests/test_app.py` for page rendering and roast API behavior.
+- `tests/test_app.py` for page rendering, roast API behavior, and post-roast feedback editing.
+
+If `pytest` cannot import `app` in your local shell, run:
+
+```bash
+PYTHONPATH=. pytest
+```
 
 ## Configuration
 
@@ -207,6 +228,7 @@ Expected shape:
 
 - `GET /api/roasts` returns recent roast sessions.
 - `POST /api/roasts` saves a roast session and its captured curve.
+- `PATCH /api/roasts/<id>` updates post-roast rating and tasting notes.
 - `GET /api/sensor/health` returns temperature and servo hardware health.
 
 Example payload:

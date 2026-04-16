@@ -9,10 +9,12 @@ This document is a restart point for future development sessions. It summarizes 
 ## Current Priorities
 
 1. Improve the active roast workflow with richer roast analytics.
-   - Good candidates: roast duration, rate-of-rise, and clearer graph annotations.
+   - Implemented: roast duration, development time, peak temperature, and current/final rate-of-rise now appear in live roast, review, and lookup views.
+   - Good follow-up candidates: turn-point detection, stronger graph annotations, and comparative batch overlays.
 
 2. Improve persistence for media and roast records.
-   - The biggest near-term win is moving photo storage out of SQLite data URLs.
+   - Implemented: post-roast cup ratings and tasting notes now save separately from roast-time notes through a dedicated edit flow.
+   - The biggest near-term win is still moving photo storage out of SQLite data URLs.
 
 3. Improve Raspberry Pi hardware polish.
    - Servo calibration, clearer diagnostics, and better recovery from hardware faults are the main gaps.
@@ -24,6 +26,7 @@ The app is currently a Flask + Socket.IO coffee roast tracker with these main us
 ```text
 Dashboard
   -> monthly roast calendar
+  -> global roast origin map
   -> hardware health panel
 
 Roast setup
@@ -39,13 +42,19 @@ Active roast session
 
 Roast review
   -> summary before save
+  -> graph preview of the exact curve to be saved
   -> optional photo upload
   -> save or cancel
 
 Lookup
-  -> saved roast list
+  -> saved roast list + search
   -> temperature curve with event badges
+  -> cup rating and tasting notes display
   -> saved photo
+
+Post-roast edit
+  -> rating after tasting
+  -> taste notes after brewing/cupping
 ```
 
 ## Important Technical Decisions
@@ -59,7 +68,10 @@ Lookup
 - Simulated mode is still first-class and should keep working for development without Raspberry Pi hardware.
 - Roast sessions are not written to the database immediately on `Finish`.
   - The active roast page stores a pending roast in browser `sessionStorage`.
-  - The review page decides whether to save or cancel.
+  - The review page shows the exact graph curve that will be saved, then decides whether to save or cancel.
+- Cup feedback is intentionally separate from roast capture.
+  - Rating and tasting notes can only be edited later from the lookup edit page.
+  - This keeps roast-time observations separate from after-tasting impressions.
 - Hardware issues during roasting are:
   - shown in the roast-session hardware widget
   - recorded into the roast event log
@@ -105,6 +117,7 @@ Lookup
 
 - `app/templates/dashboard.html`
   - monthly roast calendar
+  - global origin map
   - hardware health widget
 
 - `app/templates/roast.html`
@@ -118,13 +131,19 @@ Lookup
 
 - `app/templates/roast_review.html`
   - save/cancel step
+  - saved-curve preview
   - photo upload
 
 - `app/templates/lookup.html`
   - saved roast browser
+  - read-only tasting feedback
+
+- `app/templates/lookup_edit.html`
+  - post-roast feedback editor
 
 - `app/static/js/dashboard.js`
   - dashboard calendar and health panel
+  - origin map markers and legend
 
 - `app/static/js/roast_session.js`
   - most active frontend logic right now
@@ -134,11 +153,16 @@ Lookup
 
 - `app/static/js/roast_review.js`
   - pending roast review and save/cancel logic
+  - review chart preview
 
 - `app/static/js/lookup_page.js`
   - roast detail loading
   - event badges on saved graph
+  - tasting feedback display
   - saved photo display
+
+- `app/static/js/lookup_edit.js`
+  - post-roast feedback loading and saving
 
 ## Current Storage Shape
 
@@ -148,6 +172,8 @@ The `roast_sessions` table currently stores:
 - `curve_json`
 - `events_json`
 - `photo_data`
+- `rating`
+- `taste_notes`
 
 If this schema changes later, remember that `init_db()` currently handles additive migration for some new columns using `PRAGMA table_info(...)`.
 
@@ -188,7 +214,8 @@ Choose one of these when resuming:
 2. Improve persistence
    - move photos from SQLite data URLs to file storage
    - add export/import for roast sessions
-   - add edit/delete support for saved roasts
+   - add delete support for saved roasts
+   - consider richer tasting-history tracking per roast
 
 3. Improve hardware integration
    - add explicit servo calibration UI
@@ -214,8 +241,9 @@ Then verify:
 1. Dashboard loads.
 2. Roast setup opens `/roast/session`.
 3. Roast review opens after `Finish`.
-4. Lookup displays saved roasts.
-5. `/api/sensor/health` returns expected hardware status.
+4. Roast review shows the graph preview before save.
+5. Lookup displays saved roasts and links to post-roast edit.
+6. `/api/sensor/health` returns expected hardware status.
 
 ## Test Coverage Snapshot
 
@@ -223,6 +251,8 @@ Current automated coverage includes:
 
 - page rendering
 - roast create/detail/summary APIs
+- roast feedback patch API
+- lookup edit page render
 - sensor health endpoint
 - simulated sensor behavior
 - MAX6675 reading behavior
