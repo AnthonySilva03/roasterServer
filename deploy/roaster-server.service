@@ -1,0 +1,17 @@
+[Unit]
+Description=Roaster Server Wi-Fi Provisioning App
+After=network-online.target NetworkManager.service pigpiod.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/roasterServer
+EnvironmentFile=/home/pi/roasterServer/deploy/roaster-server.env
+ExecStart=/home/pi/roasterServer/scripts/wifi_provisioning_bootstrap.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

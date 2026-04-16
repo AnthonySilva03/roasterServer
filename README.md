@@ -218,6 +218,71 @@ Servo signal pin     ------>  SERVO_CONTROL_PIN
 Servo power/ground   ------>  external power/GND as appropriate
 ```
 
+## Raspberry Pi Wi-Fi Provisioning
+
+The app now supports a first-boot Wi-Fi onboarding flow for headless setup:
+
+1. On startup, the Pi waits briefly for any saved Wi-Fi profile to connect.
+2. If no saved network connects, it brings up a temporary hotspot.
+3. You connect to that hotspot from a phone and open `http://10.42.0.1:5000/setup/wifi`.
+4. The setup page scans nearby SSIDs, accepts your home Wi-Fi password, and saves it through `nmcli`.
+5. NetworkManager remembers the home network and reconnects automatically on later boots.
+
+The bootstrap helper is:
+
+```bash
+./scripts/wifi_provisioning_bootstrap.sh
+```
+
+Important environment variables:
+
+- `WIFI_SETUP_MODE`: enables the setup page and setup API when `true`
+- `WIFI_INTERFACE`: wireless interface to manage, usually `wlan0`
+- `WIFI_SETUP_SSID`: SSID for the temporary setup hotspot
+- `WIFI_SETUP_PASSWORD`: password for the temporary setup hotspot
+- `WIFI_SETUP_CONNECTION_NAME`: saved NetworkManager connection name for the hotspot
+- `WIFI_USE_SUDO_FOR_NMCLI`: set to `true` if the Flask process needs `sudo -n nmcli`
+
+Recommended Pi deployment notes:
+
+- Give the app permission to run `nmcli` non-interactively, or run the service as a user that already has that access.
+- Keep the setup hotspot temporary. The bootstrap script only enables it when no saved Wi-Fi profile connects.
+- The app exposes the provisioning UI only while `WIFI_SETUP_MODE=true`.
+- Full Pi deployment steps live in [docs/pi-setup.md](/home/ub20/Documents/python/flaskTesting/roasterServer/docs/pi-setup.md).
+
+## Run At Startup On Raspberry Pi
+
+The repo includes a `systemd` service template and env-file template:
+
+- [deploy/roaster-server.service](/home/ub20/Documents/python/flaskTesting/roasterServer/deploy/roaster-server.service)
+- [deploy/roaster-server.env.example](/home/ub20/Documents/python/flaskTesting/roasterServer/deploy/roaster-server.env.example)
+- [scripts/install_pi_service.sh](/home/ub20/Documents/python/flaskTesting/roasterServer/scripts/install_pi_service.sh)
+
+For the full Raspberry Pi installation and auto-start walkthrough, see [docs/pi-setup.md](/home/ub20/Documents/python/flaskTesting/roasterServer/docs/pi-setup.md).
+
+Quick start on the Pi:
+
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip network-manager pigpio
+
+cd /home/pi/roasterServer
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
+cp deploy/roaster-server.env.example deploy/roaster-server.env
+chmod +x scripts/wifi_provisioning_bootstrap.sh scripts/install_pi_service.sh
+sudo ./scripts/install_pi_service.sh
+sudo systemctl start roaster-server.service
+sudo systemctl status roaster-server.service
+```
+
+Useful service commands:
+
+```bash
+sudo systemctl restart roaster-server.service
+sudo journalctl -u roaster-server.service -f
+```
+
 1. Install `pigpio` on the Pi and start the daemon with `sudo pigpiod`.
 2. Install Python dependencies with `pip install -r requirements.txt`.
 3. Set `SENSOR_MODE=pigpio`.

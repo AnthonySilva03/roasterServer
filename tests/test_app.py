@@ -1,3 +1,6 @@
+from app.services import wifi_service
+
+
 def test_pages_render(client):
     for path in ["/", "/roast", "/lookup", "/roast/session?bean_name=Test&origin=Kenya&weight_grams=350", "/roast/review"]:
         response = client.get(path)
@@ -257,6 +260,115 @@ def test_delete_roast(client):
 def test_delete_missing_roast_returns_404(client):
     response = client.delete("/api/roasts/99999")
     assert response.status_code == 404
+
+
+def test_wifi_setup_page_hidden_when_mode_disabled(client):
+    response = client.get("/setup/wifi")
+    assert response.status_code == 404
+
+
+def test_wifi_setup_redirects_root_when_mode_enabled(client):
+    client.application.config["WIFI_SETUP_MODE"] = True
+
+    response = client.get("/")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/setup/wifi")
+
+
+def test_wifi_setup_page_renders_when_mode_enabled(client):
+    client.application.config["WIFI_SETUP_MODE"] = True
+
+    response = client.get("/setup/wifi")
+
+    assert response.status_code == 200
+    assert b"Connect this roaster to your home Wi-Fi." in response.data
+
+
+def test_wifi_setup_lists_networks(client, monkeypatch):
+    client.application.config["WIFI_SETUP_MODE"] = True
+
+    def fake_list_networks(app):
+        assert app.config["WIFI_SETUP_MODE"] is True
+        return [{"ssid": "HomeNet", "signal": 82, "security": "WPA2"}]
+
+    monkeypatch.setattr(wifi_service, "list_networks", fake_list_networks)
+
+    response = client.get("/api/setup/wifi/networks")
+
+    assert response.status_code == 200
+    assert response.get_json()["items"] == [{"ssid": "HomeNet", "signal": 82, "security": "WPA2"}]
+
+
+def test_wifi_setup_rejects_missing_ssid(client):
+    client.application.config["WIFI_SETUP_MODE"] = True
+
+    response = client.post("/api/setup/wifi/connect", json={"password": "secret"})
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "SSID is required."
+
+
+def test_wifi_setup_connects_and_saves_network(client, monkeypatch):
+    client.application.config["WIFI_SETUP_MODE"] = True
+    calls = []
+
+    def fake_connect_to_network(app, ssid, password="", hidden=False):
+        calls.append(
+            {
+                "ssid": ssid,
+                "password": password,
+                "hidden": hidden,
+                "wifi_interface": app.config["WIFI_INTERFACE"],
+            }
+        )
+
+    monkeypatch.setattr(wifi_service, "connect_to_network", fake_connect_to_network)
+
+    response = client.post(
+        "/api/setup/wifi/connect",
+        json={
+            "ssid": "MyHomeWiFi",
+            "password": "supersecret",
+            "hidden": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["connected"] is True
+    assert calls == [
+        {
+            "ssid": "MyHomeWiFi",
+            "password": "supersecret",
+            "hidden": True,
+            "wifi_interface": "wlan0",
+        }
+    ]
+
+
+def test_wifi_setup_returns_error_when_connection_fails(client, monkeypatch):
+    client.application.config["WIFI_SETUP_MODE"] = True
+
+    def fake_connect_to_network(app, ssid, password="", hidden=False):
+        raise wifi_service.WifiCommandError("Connection activation failed")
+
+    monkeypatch.setattr(wifi_service, "connect_to_network", fake_connect_to_network)
+
+    response = client.post(
+        "/api/setup/wifi/connect",
+        json={"ssid": "MyHomeWiFi", "password": "wrongpass"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Connection activation failed"
+
+
+def test_wifi_scan_parser_handles_escaped_colons():
+    assert wifi_service._split_escaped_fields(r"Cafe\:Net:78:WPA2", expected_fields=3) == [
+        "Cafe:Net",
+        "78",
+        "WPA2",
+    ]
 
 
 def test_update_roast_feedback_rejects_invalid_rating(client):

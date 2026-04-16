@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Wi-Fi Setup | Roaster Server{% endblock %}
+
+{% block content %}
+<main class="page-grid wifi-setup-page">
+    <section class="content-grid wide-left">
+        <div class="panel strong panel-pad">
+            <div class="eyebrow">Setup Hotspot</div>
+            <h1 class="hero-title">Connect this roaster to your home Wi-Fi.</h1>
+            <p class="copy">
+                Join the <strong>{{ wifi_setup_ssid }}</strong> hotspot from your phone, pick your home network,
+                enter the password, and the Pi will save it for future startups.
+            </p>
+            <div class="status-stack wifi-setup-status">
+                <div class="status-pill">Hotspot: {{ wifi_setup_ssid }}</div>
+                <div class="status-pill">Interface: {{ wifi_interface }}</div>
+                <div class="status-pill">Page: {{ wifi_setup_route }}</div>
+            </div>
+        </div>
+
+        <div class="panel panel-pad">
+            <div class="section-title">Wi-Fi Credentials</div>
+            <form id="wifi-setup-form" class="page-grid">
+                <label>
+                    Available networks
+                    <select id="wifi-ssid-select" name="ssid">
+                        <option value="">Scan for nearby Wi-Fi networks</option>
+                    </select>
+                </label>
+
+                <label>
+                    Or enter SSID manually
+                    <input id="wifi-ssid-manual" name="ssid_manual" type="text" placeholder="Hidden or not listed network">
+                </label>
+
+                <label>
+                    Password
+                    <input id="wifi-password" name="password" type="password" placeholder="Home Wi-Fi password">
+                </label>
+
+                <label class="checkbox-row">
+                    <input id="wifi-hidden" name="hidden" type="checkbox">
+                    <span>Hidden network</span>
+                </label>
+
+                <div class="form-actions">
+                    <button id="wifi-scan-button" class="secondary" type="button">Scan Networks</button>
+                    <button id="wifi-connect-button" class="primary" type="submit">Save And Connect</button>
+                </div>
+
+                <div id="wifi-setup-message" class="message" role="status" aria-live="polite">
+                    Scan first, then save your home Wi-Fi so the Pi reconnects automatically after future boots.
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <section class="three-grid">
+        <article class="panel panel-pad summary-block">
+            <div class="section-title">1. Join Hotspot</div>
+            <p class="copy">Connect your phone to <strong>{{ wifi_setup_ssid }}</strong>.</p>
+        </article>
+        <article class="panel panel-pad summary-block">
+            <div class="section-title">2. Enter Home Wi-Fi</div>
+            <p class="copy">Choose your router SSID and enter the password exactly once.</p>
+        </article>
+        <article class="panel panel-pad summary-block">
+            <div class="section-title">3. Future Bootups</div>
+            <p class="copy">NetworkManager stores the credentials and reconnects automatically on later starts.</p>
+        </article>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const networksUrl = "{{ url_for('main.wifi_setup_networks') }}";
+const connectUrl = "{{ url_for('main.wifi_setup_connect') }}";
+const setupRoute = "{{ wifi_setup_route }}";
+
+const ssidSelect = document.getElementById("wifi-ssid-select");
+const manualSsidInput = document.getElementById("wifi-ssid-manual");
+const passwordInput = document.getElementById("wifi-password");
+const hiddenCheckbox = document.getElementById("wifi-hidden");
+const messageNode = document.getElementById("wifi-setup-message");
+const scanButton = document.getElementById("wifi-scan-button");
+const connectButton = document.getElementById("wifi-connect-button");
+const form = document.getElementById("wifi-setup-form");
+
+function setMessage(text, kind = "") {
+    messageNode.textContent = text;
+    messageNode.className = kind ? `message ${kind}` : "message";
+}
+
+function selectedSsid() {
+    return manualSsidInput.value.trim() || ssidSelect.value.trim();
+}
+
+function updateBusyState(isBusy) {
+    scanButton.disabled = isBusy;
+    connectButton.disabled = isBusy;
+}
+
+async function scanNetworks() {
+    updateBusyState(true);
+    setMessage("Scanning for nearby Wi-Fi networks...");
+
+    try {
+        const response = await fetch(networksUrl);
+        const payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(payload.error || "Unable to scan for networks.");
+        }
+
+        ssidSelect.innerHTML = '<option value="">Select a Wi-Fi network</option>';
+        for (const network of payload.items) {
+            const option = document.createElement("option");
+            option.value = network.ssid;
+            option.textContent = network.signal === null
+                ? `${network.ssid} (${network.security || "open"})`
+                : `${network.ssid} (${network.signal}%${network.security ? `, ${network.security}` : ""})`;
+            ssidSelect.appendChild(option);
+        }
+
+        setMessage(`Found ${payload.items.length} network${payload.items.length === 1 ? "" : "s"}.`, "strong");
+    } catch (error) {
+        setMessage(error.message, "error");
+    } finally {
+        updateBusyState(false);
+    }
+}
+
+form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const ssid = selectedSsid();
+    if (!ssid) {
+        setMessage("Choose a network or type the SSID manually.", "error");
+        return;
+    }
+
+    updateBusyState(true);
+    setMessage(`Saving Wi-Fi for ${ssid}...`);
+
+    try {
+        const response = await fetch(connectUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                ssid,
+                password: passwordInput.value,
+                hidden: hiddenCheckbox.checked,
+            }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            throw new Error(payload.error || "Unable to save Wi-Fi credentials.");
+        }
+
+        setMessage(`${payload.message} Reconnect to the Pi on your home network after it switches over.`, "strong");
+        window.setTimeout(() => {
+            window.location.href = setupRoute;
+        }, 6000);
+    } catch (error) {
+        setMessage(error.message, "error");
+    } finally {
+        updateBusyState(false);
+    }
+});
+
+scanButton.addEventListener("click", scanNetworks);
+window.addEventListener("load", scanNetworks);
+</script>
+{% endblock %}

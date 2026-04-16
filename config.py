@@ -24,3 +24,11 @@ class Config:
     SERVO_MAX_PULSEWIDTH = int(os.environ.get("SERVO_MAX_PULSEWIDTH", "2000"))
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
     SENSOR_LOG_EVERY_N = int(os.environ.get("SENSOR_LOG_EVERY_N", "10"))
+    WIFI_SETUP_MODE = os.environ.get("WIFI_SETUP_MODE", "false").lower() == "true"
+    WIFI_INTERFACE = os.environ.get("WIFI_INTERFACE", "wlan0")
+    WIFI_SETUP_SSID = os.environ.get("WIFI_SETUP_SSID", "Roaster-Setup")
+    WIFI_SETUP_PASSWORD = os.environ.get("WIFI_SETUP_PASSWORD", "changeme123")
+    WIFI_SETUP_CONNECTION_NAME = os.environ.get("WIFI_SETUP_CONNECTION_NAME", "roaster-setup")
+    WIFI_SETUP_ROUTE = os.environ.get("WIFI_SETUP_ROUTE", "/setup/wifi")
+    WIFI_NMCLI_BINARY = os.environ.get("WIFI_NMCLI_BINARY", "nmcli")
+    WIFI_USE_SUDO_FOR_NMCLI = os.environ.get("WIFI_USE_SUDO_FOR_NMCLI", "false").lower() == "true"

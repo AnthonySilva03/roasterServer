@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, abort, current_app, jsonify, render_template, request
+from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
 
 from app import sockets as sockets_module
 from app.services.roast_storage import (
@@ -11,6 +11,7 @@ from app.services.roast_storage import (
     save_roast_session,
     update_roast_session,
 )
+from app.services import wifi_service
 
 
 main = Blueprint("main", __name__)
@@ -18,6 +19,10 @@ main = Blueprint("main", __name__)
 
 @main.route("/")
 def dashboard():
+    if wifi_service.is_setup_mode_enabled(current_app):
+        current_app.logger.info("Redirected dashboard request to Wi-Fi setup")
+        return redirect(url_for("main.wifi_setup_page"))
+
     current_app.logger.info("Rendered dashboard page")
     return render_template(
         "dashboard.html",
@@ -94,6 +99,70 @@ def lookup_edit_page(roast_id):
         "lookup_edit.html",
         active_page="lookup",
         roast_id=roast_id,
+    )
+
+
+@main.route("/setup/wifi")
+def wifi_setup_page():
+    _require_wifi_setup_mode()
+    current_app.logger.info("Rendered Wi-Fi setup page")
+    return render_template(
+        "setup_wifi.html",
+        active_page="setup",
+        wifi_setup_ssid=current_app.config["WIFI_SETUP_SSID"],
+        wifi_setup_route=current_app.config["WIFI_SETUP_ROUTE"],
+        wifi_interface=current_app.config["WIFI_INTERFACE"],
+        hide_site_nav=True,
+    )
+
+
+@main.route("/api/setup/wifi/networks", methods=["GET"])
+def wifi_setup_networks():
+    _require_wifi_setup_mode()
+
+    try:
+        networks = wifi_service.list_networks(current_app)
+    except wifi_service.WifiCommandError as error:
+        current_app.logger.warning("Wi-Fi scan failed", extra={"error": str(error)})
+        return jsonify({"error": str(error)}), 503
+
+    current_app.logger.info("Listed Wi-Fi networks", extra={"count": len(networks)})
+    return jsonify({"items": networks})
+
+
+@main.route("/api/setup/wifi/connect", methods=["POST"])
+def wifi_setup_connect():
+    _require_wifi_setup_mode()
+
+    payload = request.get_json(silent=True) or {}
+    ssid = str(payload.get("ssid", "")).strip()
+    password = str(payload.get("password", ""))
+    hidden = bool(payload.get("hidden", False))
+
+    if not ssid:
+        return jsonify({"error": "SSID is required."}), 400
+
+    try:
+        wifi_service.connect_to_network(
+            current_app,
+            ssid=ssid,
+            password=password,
+            hidden=hidden,
+        )
+    except wifi_service.WifiCommandError as error:
+        current_app.logger.warning(
+            "Wi-Fi connect failed",
+            extra={"ssid": ssid, "error": str(error)},
+        )
+        return jsonify({"error": str(error)}), 400
+
+    current_app.logger.info("Saved Wi-Fi credentials", extra={"ssid": ssid, "hidden": hidden})
+    return jsonify(
+        {
+            "connected": True,
+            "ssid": ssid,
+            "message": "Home Wi-Fi saved. The Pi should switch from setup hotspot to your home network shortly.",
+        }
     )
 
 
@@ -258,6 +327,11 @@ def create_roast():
         },
     )
     return jsonify(roast), 201
+
+
+def _require_wifi_setup_mode():
+    if not wifi_service.is_setup_mode_enabled(current_app):
+        abort(404)
 
 
 @main.route("/api/sensor/health", methods=["GET"])

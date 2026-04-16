@@ -16,11 +16,13 @@
                 <div class="brand-title">Coffee roast telemetry workspace</div>
                 <div class="brand-copy">Live monitoring, roast capture, and roast lookup in one place.</div>
             </div>
+            {% if not hide_site_nav %}
             <nav class="site-nav">
                 <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard</a>
                 <a class="nav-link {% if active_page == 'roast' %}active{% endif %}" href="{{ url_for('main.roast_page') }}">Roasting</a>
                 <a class="nav-link {% if active_page == 'lookup' %}active{% endif %}" href="{{ url_for('main.lookup_page') }}">Lookup</a>
             </nav>
+            {% endif %}
         </header>
 
         {% block content %}{% endblock %}

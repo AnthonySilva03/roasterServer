@@ -14,6 +14,9 @@
     --border: rgba(171, 193, 255, 0.14);
     --shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
     --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    --shell-width: 1380px;
+    --panel-radius: 24px;
+    --touch-target: 48px;
 }
 
 * {
@@ -22,7 +25,7 @@
 
 body {
     margin: 0;
-    font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+    font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
     color: var(--ink);
     background:
         radial-gradient(circle at top left, rgba(93, 225, 255, 0.16), transparent 26%),
@@ -30,6 +33,7 @@ body {
         radial-gradient(circle at 50% 120%, rgba(255, 143, 71, 0.12), transparent 36%),
         linear-gradient(180deg, #09101d 0%, #070b15 45%, #05070d 100%);
     min-height: 100vh;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
 }
 
 a {
@@ -45,7 +49,7 @@ textarea {
 }
 
 .site-shell {
-    max-width: 1380px;
+    max-width: var(--shell-width);
     margin: 0 auto;
     padding: 28px 24px 56px;
 }
@@ -94,6 +98,9 @@ textarea {
 }
 
 .nav-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 10px 14px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.04);
@@ -143,7 +150,7 @@ textarea {
 .panel {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 24px;
+    border-radius: var(--panel-radius);
     box-shadow: var(--shadow), var(--glass-highlight);
     backdrop-filter: blur(18px);
 }
@@ -165,6 +172,7 @@ textarea {
     margin: 10px 0 14px;
     font-size: clamp(2rem, 4vw, 3.4rem);
     line-height: 1;
+    letter-spacing: -0.03em;
 }
 
 .section-title {
@@ -230,6 +238,7 @@ textarea {
 button {
     border: none;
     border-radius: 999px;
+    min-height: var(--touch-target);
     padding: 12px 18px;
     font-size: 0.95rem;
     font-weight: 700;
@@ -270,6 +279,7 @@ button:disabled {
     justify-content: center;
     text-decoration: none;
     border-radius: 999px;
+    min-height: var(--touch-target);
     padding: 12px 18px;
     font-size: 0.95rem;
     font-weight: 700;
@@ -295,6 +305,11 @@ button:disabled {
 
 .message.strong {
     color: var(--accent-dark);
+    font-weight: 600;
+}
+
+.message.error {
+    color: #ff9d9d;
     font-weight: 600;
 }
 
@@ -337,12 +352,23 @@ label {
     font-size: 0.92rem;
 }
 
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.checkbox-row input {
+    width: auto;
+}
+
 input,
 select,
 textarea {
     width: 100%;
     border: 1px solid var(--border);
     border-radius: 14px;
+    min-height: var(--touch-target);
     padding: 12px 14px;
     background: rgba(7, 11, 22, 0.9);
     color: var(--ink);
@@ -607,6 +633,15 @@ textarea {
     gap: 10px;
 }
 
+.lookup-sidebar,
+.lookup-detail-panel,
+.history-item,
+.lookup-item,
+.summary-block,
+.status-pill {
+    scroll-margin-top: 16px;
+}
+
 .calendar-cell.has-roasts {
     background: rgba(255, 143, 71, 0.12);
     border-color: rgba(255, 143, 71, 0.24);
@@ -688,6 +723,14 @@ textarea {
     background: rgba(255, 255, 255, 0.03);
 }
 
+.wifi-setup-page {
+    gap: 24px;
+}
+
+.wifi-setup-status {
+    margin-top: 20px;
+}
+
 canvas {
     width: 100% !important;
     height: min(48vh, 420px) !important;
@@ -718,5 +761,244 @@ canvas {
 
     .lookup-chart-stage canvas {
         height: 300px !important;
+    }
+}
+
+@media (max-width: 720px) {
+    :root {
+        --panel-radius: 22px;
+        --touch-target: 52px;
+    }
+
+    body {
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
+    }
+
+    .site-shell {
+        padding: 14px 14px 28px;
+    }
+
+    .site-header {
+        position: sticky;
+        top: 10px;
+        z-index: 20;
+        margin-bottom: 18px;
+        padding: 16px 16px 14px;
+        border-radius: 24px;
+        gap: 14px;
+        align-items: flex-start;
+        background:
+            radial-gradient(circle at top right, rgba(255, 143, 71, 0.14), transparent 34%),
+            linear-gradient(180deg, rgba(10, 15, 29, 0.96), rgba(6, 9, 18, 0.96));
+    }
+
+    .brand-block {
+        gap: 6px;
+    }
+
+    .brand-title {
+        font-size: 1.12rem;
+        line-height: 1.15;
+    }
+
+    .brand-copy {
+        font-size: 0.88rem;
+        max-width: 28ch;
+    }
+
+    .site-nav {
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+        z-index: 40;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        padding: 10px;
+        border: 1px solid rgba(171, 193, 255, 0.16);
+        border-radius: 22px;
+        background:
+            linear-gradient(180deg, rgba(13, 18, 33, 0.94), rgba(7, 11, 20, 0.98));
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42), var(--glass-highlight);
+        backdrop-filter: blur(22px);
+    }
+
+    .nav-link,
+    .button-link.secondary,
+    .button-link.ghost {
+        min-height: 54px;
+        padding: 12px 10px;
+        border-radius: 16px;
+        font-size: 0.85rem;
+        text-align: center;
+    }
+
+    .page-grid {
+        gap: 14px;
+    }
+
+    .hero-grid,
+    .three-grid,
+    .two-grid,
+    .content-grid,
+    .content-grid.wide-left,
+    .summary-grid,
+    .field-grid,
+    .lookup-layout,
+    .lookup-detail-grid,
+    .control-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .panel-pad,
+    .chart-card,
+    .lookup-chart-stage {
+        padding: 18px;
+    }
+
+    .hero-title {
+        margin: 8px 0 12px;
+        font-size: clamp(1.72rem, 10vw, 2.35rem);
+        line-height: 0.98;
+    }
+
+    .section-title {
+        margin-bottom: 10px;
+        font-size: 1rem;
+    }
+
+    .copy,
+    .detail-copy,
+    .helper-text,
+    .summary-label,
+    label {
+        font-size: 0.92rem;
+    }
+
+    .controls,
+    .form-actions,
+    .inline-controls {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .controls > *,
+    .form-actions > *,
+    .inline-controls > * {
+        width: 100%;
+    }
+
+    .status-stack,
+    .metric-stack,
+    .history-list,
+    .detail-stack {
+        gap: 10px;
+    }
+
+    .status-pill,
+    .stat-line {
+        width: 100%;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border-radius: 16px;
+        font-size: 0.9rem;
+    }
+
+    .history-item,
+    .lookup-item,
+    .summary-block {
+        border-radius: 16px;
+        padding: 14px;
+    }
+
+    .summary-number,
+    .health-value {
+        font-size: 1.45rem;
+    }
+
+    .lookup-layout {
+        gap: 14px;
+    }
+
+    .lookup-sidebar {
+        position: static;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .lookup-list {
+        max-height: none;
+        padding-right: 0;
+    }
+
+    .lookup-detail-header,
+    .lookup-chart-header,
+    .calendar-toolbar,
+    .history-topline,
+    .lookup-topline {
+        display: grid;
+        gap: 12px;
+    }
+
+    .lookup-detail-tags {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .calendar-weekdays,
+    .calendar-grid {
+        gap: 6px;
+    }
+
+    .calendar-cell,
+    .calendar-cell.muted-cell {
+        min-height: 84px;
+        padding: 8px;
+        border-radius: 14px;
+    }
+
+    .calendar-day-number {
+        font-size: 0.95rem;
+    }
+
+    .calendar-day-count {
+        font-size: 0.75rem;
+    }
+
+    .origin-map-card {
+        min-height: 250px;
+        border-radius: 22px;
+    }
+
+    .origin-map-card-compact {
+        min-height: 180px;
+    }
+
+    .origin-marker {
+        gap: 5px;
+    }
+
+    .origin-marker-dot {
+        width: 10px;
+        height: 10px;
+    }
+
+    .origin-marker-label {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 0.7rem;
+        padding: 4px 8px;
+    }
+
+    canvas,
+    .lookup-chart-stage canvas {
+        height: 240px !important;
+    }
+
+    .photo-preview {
+        border-radius: 14px;
     }
 }

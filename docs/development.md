@@ -86,6 +86,7 @@ Or with the helper script:
 - The current hardware reader expects a MAX6675 thermocouple breakout.
 - The roast speed slider can drive a servo through `SERVO_CONTROL_PIN` when hardware mode is enabled.
 - If the Pi reader is unavailable, the app falls back to simulated data so the UI still works.
+- For Wi-Fi onboarding, use `./scripts/wifi_provisioning_bootstrap.sh` instead of `python run.py` so the Pi can fall back to a temporary setup hotspot when it is not already on a saved network.
 
 ### Pi Setup Visual
 
@@ -98,6 +99,96 @@ export SERVO_CONTROL_PIN=18
 
 sudo pigpiod
 make run
+```
+
+### Wi-Fi Provisioning Flow
+
+The app includes a Wi-Fi setup page at `/setup/wifi`, but it only exists while `WIFI_SETUP_MODE=true`.
+
+Recommended Pi startup flow:
+
+```text
+boot
+  |
+  v
+wait for saved Wi-Fi profile
+  |
+  +--> connected
+  |      |
+  |      v
+  |   start Flask normally
+  |
+  +--> not connected
+         |
+         v
+      start temporary hotspot
+         |
+         v
+      open /setup/wifi from phone
+         |
+         v
+      save home SSID + password with nmcli
+```
+
+Run the helper manually during development:
+
+```bash
+export WIFI_SETUP_SSID=Roaster-Setup
+export WIFI_SETUP_PASSWORD=changeme123
+./scripts/wifi_provisioning_bootstrap.sh
+```
+
+If the Flask process cannot call `nmcli` directly, enable:
+
+```bash
+export WIFI_USE_SUDO_FOR_NMCLI=true
+```
+
+Then allow passwordless `nmcli` for the service user in `sudoers`. The setup route uses `sudo -n`, so it will fail fast instead of hanging for a password prompt.
+
+### Start On Boot With systemd
+
+The repo includes a ready-to-edit unit file at [deploy/roaster-server.service](/home/ub20/Documents/python/flaskTesting/roasterServer/deploy/roaster-server.service) and an env template at [deploy/roaster-server.env.example](/home/ub20/Documents/python/flaskTesting/roasterServer/deploy/roaster-server.env.example).
+
+The full Raspberry Pi deployment guide now lives in [docs/pi-setup.md](/home/ub20/Documents/python/flaskTesting/roasterServer/docs/pi-setup.md).
+
+Quick install on a Pi:
+
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip network-manager pigpio
+sudo systemctl enable NetworkManager
+
+cd /home/pi/roasterServer
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
+cp deploy/roaster-server.env.example deploy/roaster-server.env
+sudo ./scripts/install_pi_service.sh
+sudo systemctl start roaster-server.service
+```
+
+To let the app save Wi-Fi credentials through `nmcli`, add `/etc/sudoers.d/roaster-server` with:
+
+```sudoers
+pi ALL=(root) NOPASSWD: /usr/bin/nmcli
+```
+
+Validate it with:
+
+```bash
+sudo visudo -cf /etc/sudoers.d/roaster-server
+```
+
+The service launches `scripts/wifi_provisioning_bootstrap.sh`, so startup behavior is:
+
+- If a saved Wi-Fi connection comes up, the app starts in normal mode.
+- If no saved Wi-Fi connects, the script enables the setup hotspot and starts Flask in setup mode.
+
+For troubleshooting:
+
+```bash
+sudo systemctl status roaster-server.service
+sudo journalctl -u roaster-server.service -f
 ```
 
 ## Hardware Health Check
