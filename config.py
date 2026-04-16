@@ -22,3 +22,5 @@ class Config:
     SERVO_CONTROL_PIN = int(os.environ.get("SERVO_CONTROL_PIN", "18"))
     SERVO_MIN_PULSEWIDTH = int(os.environ.get("SERVO_MIN_PULSEWIDTH", "1000"))
     SERVO_MAX_PULSEWIDTH = int(os.environ.get("SERVO_MAX_PULSEWIDTH", "2000"))
+    LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+    SENSOR_LOG_EVERY_N = int(os.environ.get("SENSOR_LOG_EVERY_N", "10"))

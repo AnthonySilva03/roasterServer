@@ -1,19 +1,25 @@
+import logging
+
 from flask_socketio import emit
 
 from . import socketio
 from .services.sensor_service import SensorService
 
 
+logger = logging.getLogger("roasterServer.sockets")
 sensor_service = None
 latest_sample = None
 background_started = False
 sensor_interval_seconds = 2.0
+sensor_log_every_n = 10
+sample_counter = 0
 
 
 def register_socket_handlers(app):
-    global sensor_interval_seconds, sensor_service
+    global sensor_interval_seconds, sensor_service, sensor_log_every_n
 
     sensor_interval_seconds = app.config["SENSOR_INTERVAL_SECONDS"]
+    sensor_log_every_n = max(1, int(app.config.get("SENSOR_LOG_EVERY_N", 10)))
 
     if sensor_service is None:
         sensor_service = SensorService(
@@ -26,6 +32,12 @@ def register_socket_handlers(app):
             servo_min_pulsewidth=app.config["SERVO_MIN_PULSEWIDTH"],
             servo_max_pulsewidth=app.config["SERVO_MAX_PULSEWIDTH"],
         )
+        logger.info(
+            "Sensor service initialized mode=%s interval=%.2fs speed=%s",
+            app.config["SENSOR_MODE"],
+            sensor_interval_seconds,
+            sensor_service.health_status()["speed"],
+        )
 
     if app.config.get("START_SENSOR_BACKGROUND_TASK", True):
         _ensure_background_task()
@@ -36,15 +48,25 @@ def _ensure_background_task():
 
     if not background_started:
         background_started = True
+        logger.info("Starting sensor background task")
         socketio.start_background_task(_sensor_loop)
 
 
 def _sensor_loop():
-    global latest_sample
+    global latest_sample, sample_counter
 
     while True:
         if sensor_service and sensor_service.active:
             latest_sample = sensor_service.read_sample()
+            sample_counter += 1
+            if sample_counter == 1 or sample_counter % sensor_log_every_n == 0:
+                logger.info(
+                    "Sensor sample #%s temperature=%s source=%s speed=%s",
+                    sample_counter,
+                    latest_sample["temperature"],
+                    latest_sample["source"],
+                    latest_sample["speed"],
+                )
             socketio.emit("sensor_data", latest_sample)
 
         socketio.sleep(sensor_interval_seconds)
@@ -52,6 +74,11 @@ def _sensor_loop():
 
 @socketio.on("connect")
 def handle_connect():
+    logger.info(
+        "Socket client connected active=%s source=%s",
+        sensor_service.active if sensor_service else False,
+        sensor_service.source_name if sensor_service else "unknown",
+    )
     emit(
         "sensor_state",
         {
@@ -66,13 +93,15 @@ def handle_connect():
 
 @socketio.on("control")
 def handle_control(data):
-    global latest_sample
+    global latest_sample, sample_counter
 
     if sensor_service is None:
+        logger.warning("Socket control received before sensor service initialization")
         emit("control_response", {"message": "Sensor service is not ready yet."})
         return
 
     command = (data or {}).get("command")
+    logger.info("Received socket control command=%s payload=%s", command, data)
 
     if command == "start":
         sensor_service.start()
@@ -83,6 +112,7 @@ def handle_control(data):
     elif command == "reset":
         sensor_service.reset()
         latest_sample = None
+        sample_counter = 0
         message = "Sensor values reset."
     elif command == "set_speed":
         speed = (data or {}).get("speed", 50)
@@ -90,7 +120,9 @@ def handle_control(data):
         message = f"Speed controller set to {result['speed']}%."
     else:
         message = "Unknown command."
+        logger.warning("Unknown socket control command=%s", command)
 
+    logger.info("Socket control result command=%s message=%s", command, message)
     emit("control_response", {"message": message})
     socketio.emit(
         "sensor_state",

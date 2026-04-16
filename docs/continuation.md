@@ -9,7 +9,7 @@ This document is a restart point for future development sessions. It summarizes 
 ## Current Priorities
 
 1. Improve the active roast workflow with richer roast analytics.
-   - Implemented: roast duration, development time, peak temperature, and current/final rate-of-rise now appear in live roast, review, and lookup views.
+   - Implemented: roast duration, development time, development ratio, and peak temperature now appear across the roast flow.
    - Good follow-up candidates: turn-point detection, stronger graph annotations, and comparative batch overlays.
 
 2. Improve persistence for media and roast records.
@@ -26,7 +26,8 @@ The app is currently a Flask + Socket.IO coffee roast tracker with these main us
 ```text
 Dashboard
   -> monthly roast calendar
-  -> global roast origin map
+  -> interactive global roast origin map
+  -> clickable selected-origin roast list
   -> hardware health panel
 
 Roast setup
@@ -48,6 +49,7 @@ Roast review
 
 Lookup
   -> saved roast list + search
+  -> compact global origin filter map
   -> temperature curve with event badges
   -> cup rating and tasting notes display
   -> saved photo
@@ -117,7 +119,8 @@ Post-roast edit
 
 - `app/templates/dashboard.html`
   - monthly roast calendar
-  - global origin map
+  - interactive origin map
+  - selected-origin roast list
   - hardware health widget
 
 - `app/templates/roast.html`
@@ -136,6 +139,7 @@ Post-roast edit
 
 - `app/templates/lookup.html`
   - saved roast browser
+  - map-based origin filter
   - read-only tasting feedback
 
 - `app/templates/lookup_edit.html`
@@ -143,7 +147,7 @@ Post-roast edit
 
 - `app/static/js/dashboard.js`
   - dashboard calendar and health panel
-  - origin map markers and legend
+  - origin map markers, legend, and selected-origin drilldown
 
 - `app/static/js/roast_session.js`
   - most active frontend logic right now
@@ -157,12 +161,17 @@ Post-roast edit
 
 - `app/static/js/lookup_page.js`
   - roast detail loading
+  - origin map filtering
   - event badges on saved graph
   - tasting feedback display
   - saved photo display
 
 - `app/static/js/lookup_edit.js`
   - post-roast feedback loading and saving
+
+- `app/static/js/origin_map.js`
+  - shared coffee-region geo matching
+  - origin marker projection helpers
 
 ## Current Storage Shape
 
@@ -195,6 +204,8 @@ SENSOR_MODE=pigpio
 
 - `photo_data` is currently stored directly in SQLite as a data URL string.
   - This is simple, but database size can grow quickly if users attach large photos.
+- Origin mapping is alias-based.
+  - New or unusual origin strings may need extra aliases added to `app/static/js/origin_map.js`.
 - Roast review persistence depends on browser `sessionStorage`.
   - If the browser tab is closed unexpectedly before save, the pending roast may be lost.
 - Sensor polling and health checks are simple and synchronous right now.
@@ -226,6 +237,7 @@ Choose one of these when resuming:
    - better mobile layout on roast session page
    - toast notifications
    - richer lookup filters/search
+   - map clustering or tooltips for dense origin regions
 
 ## Recommended Restart Checklist
 
@@ -258,6 +270,12 @@ Current automated coverage includes:
 - MAX6675 reading behavior
 - servo pulse mapping
 - hardware health reporting
+
+Recent manual verification also covered:
+
+- interactive dashboard origin selection
+- interactive lookup origin filtering
+- testing logs during app startup and socket control
 
 If you add new hardware features, extend:
 

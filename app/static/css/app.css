@@ -446,7 +446,7 @@ textarea {
     border-radius: 28px;
     overflow: hidden;
     background:
-        radial-gradient(circle at top, rgba(42, 127, 134, 0.2), transparent 40%),
+        radial-gradient(circle at top, rgba(42, 127, 134, 0.22), transparent 40%),
         linear-gradient(180deg, rgba(227, 241, 239, 0.95), rgba(245, 249, 247, 0.98));
     border: 1px solid rgba(42, 127, 134, 0.12);
 }
@@ -458,14 +458,25 @@ textarea {
 }
 
 .origin-map-ocean {
-    fill: rgba(213, 234, 232, 0.88);
+    fill: url(#originOceanGradient);
+}
+
+.origin-map-grid line {
+    stroke: rgba(56, 122, 127, 0.12);
+    stroke-width: 1;
 }
 
 .origin-map-land {
-    fill: rgba(108, 138, 113, 0.82);
-    stroke: rgba(66, 95, 69, 0.34);
-    stroke-width: 6;
+    fill: rgba(114, 144, 115, 0.84);
+    stroke: rgba(66, 95, 69, 0.28);
+    stroke-width: 4;
     stroke-linejoin: round;
+}
+
+.origin-map-island {
+    fill: rgba(114, 144, 115, 0.84);
+    stroke: rgba(66, 95, 69, 0.24);
+    stroke-width: 2;
 }
 
 .origin-map-markers {
@@ -483,7 +494,8 @@ textarea {
     border: none;
     background: transparent;
     padding: 0;
-    pointer-events: none;
+    pointer-events: auto;
+    cursor: pointer;
 }
 
 .origin-marker-dot {
@@ -491,7 +503,16 @@ textarea {
     height: 12px;
     border-radius: 999px;
     background: var(--accent);
-    box-shadow: 0 0 0 6px rgba(180, 84, 43, 0.18);
+    box-shadow:
+        0 0 0 5px rgba(180, 84, 43, 0.16),
+        0 10px 18px rgba(80, 46, 22, 0.18);
+}
+
+.origin-marker.active .origin-marker-dot {
+    box-shadow:
+        0 0 0 7px rgba(42, 127, 134, 0.22),
+        0 10px 18px rgba(80, 46, 22, 0.18);
+    background: var(--teal);
 }
 
 .origin-marker-label {
@@ -503,6 +524,20 @@ textarea {
     font-size: 0.8rem;
     font-weight: 700;
     white-space: nowrap;
+}
+
+.origin-marker.active .origin-marker-label {
+    border-color: rgba(42, 127, 134, 0.34);
+    color: var(--teal);
+}
+
+.origin-map-card-compact {
+    min-height: 220px;
+}
+
+.origin-map-card-compact .origin-marker-label {
+    font-size: 0.72rem;
+    padding: 3px 8px;
 }
 
 .calendar-toolbar {

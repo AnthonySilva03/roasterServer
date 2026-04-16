@@ -8,7 +8,6 @@ const reviewEventsEl = document.getElementById("reviewEvents");
 const reviewDurationEl = document.getElementById("reviewDuration");
 const reviewDevelopmentEl = document.getElementById("reviewDevelopment");
 const reviewDevelopmentRatioEl = document.getElementById("reviewDevelopmentRatio");
-const reviewCurrentRorEl = document.getElementById("reviewCurrentRor");
 const reviewPeakTemperatureEl = document.getElementById("reviewPeakTemperature");
 const reviewAnalyticsCopyEl = document.getElementById("reviewAnalyticsCopy");
 const saveRoastButtonEl = document.getElementById("saveRoastButton");
@@ -51,13 +50,12 @@ function renderPendingRoast() {
     reviewDevelopmentRatioEl.textContent = analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio)
         ? `${analytics.developmentRatio.toFixed(0)}%`
         : "--";
-    reviewCurrentRorEl.textContent = formatRate(analytics.currentRor);
     reviewPeakTemperatureEl.textContent = Number.isFinite(analytics.peakTemperature)
         ? `${analytics.peakTemperature.toFixed(1)} °C`
         : "--";
     reviewMessageEl.textContent = "Review the roast and choose Save or Cancel.";
     reviewAnalyticsCopyEl.textContent = analytics.developmentSeconds !== null
-        ? `This review includes the graph that will be saved. Development ran ${formatDuration(analytics.developmentSeconds)} and the final rise rate was ${formatRate(analytics.currentRor)}.`
+        ? `This review includes the graph that will be saved. Development ran ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`
         : "First crack was not marked, so development metrics are limited for this roast.";
 
     reviewTemperatureChart.data.labels = (pendingRoast.curve || []).map((point) => point.timestamp);

@@ -8,9 +8,9 @@ Roaster Server is a Flask and Socket.IO dashboard for tracking live roast teleme
 - Falls back to simulated sensor data when Raspberry Pi hardware is unavailable.
 - Drives a Raspberry Pi servo speed controller during roasting when `pigpio` hardware mode is enabled.
 - Shows live hardware health on the dashboard using the sensor health API.
-- Plots saved roast origins on a global dashboard map when origin text matches supported countries.
+- Plots saved roast origins on interactive global maps using region and country matching from saved origin names.
 - Saves roast session metadata, event markers, optional photo data, and the current chart curve to `instance/roasts.db`.
-- Calculates roast analytics like duration, development time, peak temperature, and rate-of-rise from captured curves.
+- Calculates roast analytics like duration, development time, ratio, and peak temperature from captured curves.
 - Supports post-roast cup ratings and tasting notes from a dedicated edit page after the beans are brewed or cupped.
 - Exposes simple HTTP endpoints for listing roasts, saving roasts, and checking hardware health.
 
@@ -87,7 +87,8 @@ The app binds to `0.0.0.0:5000` by default, so it is reachable from your local n
 ```text
 /                Dashboard
                  - monthly roast calendar
-                 - global roast origin map
+                 - interactive global roast origin map
+                 - clickable origin roast list
                  - hardware health
 
 /roast           Roast setup
@@ -109,6 +110,7 @@ The app binds to `0.0.0.0:5000` by default, so it is reachable from your local n
                  - save or cancel
 
 /lookup          Saved roast explorer
+                 - global origin filter map
                  - roast list
                  - roast analytics
                  - cup rating + tasting notes
@@ -170,12 +172,26 @@ These environment variables are supported:
 - `MAX_CHART_POINTS`
 - `SOCKET_CORS_ALLOWED_ORIGINS`
 - `SENSOR_MODE`
+- `LOG_LEVEL`
+- `SENSOR_LOG_EVERY_N`
 - `MAX6675_CS_PIN`
 - `MAX6675_CLK_PIN`
 - `MAX6675_DO_PIN`
 - `SERVO_CONTROL_PIN`
 - `SERVO_MIN_PULSEWIDTH`
 - `SERVO_MAX_PULSEWIDTH`
+
+### Testing Logs
+
+For local testing, the app now logs startup, route hits, roast saves, feedback edits, socket controls, and periodic sensor samples to the console.
+
+Useful overrides:
+
+```bash
+export LOG_LEVEL=INFO
+export SENSOR_LOG_EVERY_N=5
+python3 run.py
+```
 
 ### Raspberry Pi Temperature Reader And Servo Control
 

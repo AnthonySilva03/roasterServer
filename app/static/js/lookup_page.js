@@ -1,6 +1,9 @@
 const lookupListEl = document.getElementById("lookupList");
 const lookupSearchInputEl = document.getElementById("lookupSearchInput");
 const lookupSearchSummaryEl = document.getElementById("lookupSearchSummary");
+const lookupOriginMapSummaryEl = document.getElementById("lookupOriginMapSummary");
+const lookupOriginMapMarkersEl = document.getElementById("lookupOriginMapMarkers");
+const clearOriginFilterButtonEl = document.getElementById("clearOriginFilterButton");
 const refreshLookupButtonEl = document.getElementById("refreshLookupButton");
 const summaryRoastsEl = document.getElementById("summaryRoasts");
 const summarySamplesEl = document.getElementById("summarySamples");
@@ -14,7 +17,6 @@ const detailSamplesEl = document.getElementById("detailSamples");
 const detailDurationEl = document.getElementById("detailDuration");
 const detailDevelopmentEl = document.getElementById("detailDevelopment");
 const detailDevelopmentRatioEl = document.getElementById("detailDevelopmentRatio");
-const detailCurrentRorEl = document.getElementById("detailCurrentRor");
 const detailPeakTemperatureEl = document.getElementById("detailPeakTemperature");
 const detailAnalyticsCopyEl = document.getElementById("detailAnalyticsCopy");
 const detailRatingEl = document.getElementById("detailRating");
@@ -33,6 +35,7 @@ const lookupTemperatureChart = createLineChart(
 
 let selectedRoastId = null;
 let lookupItems = [];
+let selectedOriginKey = null;
 
 function roastMatchesSearch(item, query) {
     if (!query) {
@@ -54,7 +57,19 @@ function roastMatchesSearch(item, query) {
 
 function getFilteredLookupItems() {
     const query = (lookupSearchInputEl.value || "").trim().toLowerCase();
-    return lookupItems.filter((item) => roastMatchesSearch(item, query));
+    return lookupItems.filter((item) => {
+        const matchesSearch = roastMatchesSearch(item, query);
+        if (!matchesSearch) {
+            return false;
+        }
+
+        if (!selectedOriginKey) {
+            return true;
+        }
+
+        const resolvedOrigin = resolveOriginLocation(item.origin);
+        return resolvedOrigin && resolvedOrigin.key === selectedOriginKey;
+    });
 }
 
 function updateLookupSearchSummary(filteredItems) {
@@ -65,13 +80,41 @@ function updateLookupSearchSummary(filteredItems) {
     }
 
     if (!query) {
-        lookupSearchSummaryEl.textContent = `${filteredItems.length} saved session${filteredItems.length === 1 ? "" : "s"} ready to browse.`;
+        lookupSearchSummaryEl.textContent = `${filteredItems.length} saved session${filteredItems.length === 1 ? "" : "s"} ready to browse${selectedOriginKey ? " from the selected origin" : ""}.`;
         return;
     }
 
     lookupSearchSummaryEl.textContent = filteredItems.length
         ? `${filteredItems.length} match${filteredItems.length === 1 ? "" : "es"} for "${query}".`
         : `No saved sessions matched "${query}".`;
+}
+
+function renderLookupOriginMap() {
+    const mappedOrigins = buildMappedOrigins(lookupItems);
+    if (!mappedOrigins.length) {
+        lookupOriginMapSummaryEl.textContent = "No mapped roast origins available yet.";
+        lookupOriginMapMarkersEl.innerHTML = "";
+        clearOriginFilterButtonEl.disabled = true;
+        return;
+    }
+
+    if (selectedOriginKey && !mappedOrigins.some((origin) => origin.key === selectedOriginKey)) {
+        selectedOriginKey = null;
+    }
+
+    const selectedOrigin = mappedOrigins.find((origin) => origin.key === selectedOriginKey);
+    lookupOriginMapSummaryEl.textContent = selectedOriginKey
+        ? `Filtering lookup to ${(selectedOrigin && selectedOrigin.canonicalLabel) || "selected origin"}.`
+        : `Click a mapped origin to filter ${mappedOrigins.length} origin${mappedOrigins.length === 1 ? "" : "s"}.`;
+
+    renderOriginMarkers(lookupOriginMapMarkersEl, mappedOrigins, selectedOriginKey);
+    lookupOriginMapMarkersEl.querySelectorAll("[data-origin-key]").forEach((button) => {
+        button.addEventListener("click", () => {
+            selectedOriginKey = button.dataset.originKey;
+            renderLookupView();
+        });
+    });
+    clearOriginFilterButtonEl.disabled = !selectedOriginKey;
 }
 
 function formatLookupDate(dateString) {
@@ -187,14 +230,13 @@ function setLookupDetail(roast) {
     detailDevelopmentRatioEl.textContent = analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio)
         ? `${analytics.developmentRatio.toFixed(0)}%`
         : "--";
-    detailCurrentRorEl.textContent = formatRate(analytics.currentRor);
     detailPeakTemperatureEl.textContent = Number.isFinite(analytics.peakTemperature)
         ? `${analytics.peakTemperature.toFixed(1)} °C`
         : "--";
     detailRatingEl.textContent = roast.rating ? `${roast.rating}/5` : "Not rated";
     detailTasteNotesEl.textContent = roast.taste_notes || "Taste notes can be added from the post-roast edit page.";
     detailAnalyticsCopyEl.textContent = analytics.developmentSeconds !== null
-        ? `Development lasted ${formatDuration(analytics.developmentSeconds)} and the final rise rate was ${formatRate(analytics.currentRor)}.`
+        ? `Development lasted ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`
         : "First crack was not marked for this roast, so development metrics are incomplete.";
     detailNotesEl.textContent = roast.notes || "No notes recorded.";
     editTasteFeedbackLinkEl.href = `/lookup/${roast.id}/edit`;
@@ -226,7 +268,6 @@ function clearLookupDetail(copy) {
     detailDurationEl.textContent = "--";
     detailDevelopmentEl.textContent = "--";
     detailDevelopmentRatioEl.textContent = "--";
-    detailCurrentRorEl.textContent = "--";
     detailPeakTemperatureEl.textContent = "--";
     detailRatingEl.textContent = "--";
     detailTasteNotesEl.textContent = "Taste notes can be added from the post-roast edit page.";
@@ -243,6 +284,7 @@ function clearLookupDetail(copy) {
 
 function renderLookupView() {
     const filteredItems = getFilteredLookupItems();
+    renderLookupOriginMap();
     updateLookupSearchSummary(filteredItems);
     renderLookupList(filteredItems);
 
@@ -295,6 +337,11 @@ refreshLookupButtonEl.addEventListener("click", () => {
 });
 
 lookupSearchInputEl.addEventListener("input", () => {
+    renderLookupView();
+});
+
+clearOriginFilterButtonEl.addEventListener("click", () => {
+    selectedOriginKey = null;
     renderLookupView();
 });
 

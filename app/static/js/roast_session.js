@@ -27,7 +27,6 @@ const roastHardwareErrorEl = document.getElementById("roastHardwareError");
 const roastLatestIssueEl = document.getElementById("roastLatestIssue");
 const roastLatestIssueTextEl = document.getElementById("roastLatestIssueText");
 const analyticsDurationEl = document.getElementById("analyticsDuration");
-const analyticsCurrentRorEl = document.getElementById("analyticsCurrentRor");
 const analyticsDevelopmentEl = document.getElementById("analyticsDevelopment");
 const analyticsDevelopmentRatioEl = document.getElementById("analyticsDevelopmentRatio");
 const analyticsPeakTemperatureEl = document.getElementById("analyticsPeakTemperature");
@@ -87,7 +86,6 @@ function renderAnalytics() {
     });
 
     analyticsDurationEl.textContent = formatDuration(analytics.totalDurationSeconds);
-    analyticsCurrentRorEl.textContent = formatRate(analytics.currentRor);
     analyticsDevelopmentEl.textContent = formatDuration(analytics.developmentSeconds);
     analyticsDevelopmentRatioEl.textContent = analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio)
         ? `${analytics.developmentRatio.toFixed(0)}%`
@@ -111,7 +109,7 @@ function renderAnalytics() {
         return;
     }
 
-    analyticsCopyEl.textContent = `Development phase is ${formatDuration(analytics.developmentSeconds)} so far and the current rise rate is ${formatRate(analytics.currentRor)}.`;
+    analyticsCopyEl.textContent = `Development phase is ${formatDuration(analytics.developmentSeconds)} so far with peak temperature at ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`;
 }
 
 function rebuildStageMarkers() {
@@ -219,7 +217,6 @@ function buildPendingRoastPayload() {
         `Roast duration: ${formatDuration(analytics.totalDurationSeconds)}`,
         `Development time: ${formatDuration(analytics.developmentSeconds)}`,
         `Development ratio: ${analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio) ? `${analytics.developmentRatio.toFixed(0)}%` : "--"}`,
-        `Current RoR at finish: ${formatRate(analytics.currentRor)}`,
         `Peak temperature: ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}`,
     ].join("\n");
 

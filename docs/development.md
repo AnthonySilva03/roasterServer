@@ -55,11 +55,13 @@ Or with the helper script:
 
 - If `pigpio` is unavailable, the app automatically uses simulated data.
 - The dashboard includes a hardware health panel backed by `GET /api/sensor/health`.
-- The dashboard also plots saved roast origins on a lightweight world map when origin text matches known countries.
+- The dashboard also plots saved roast origins on an interactive world map that matches coffee regions and countries from saved origin text.
+- The lookup page includes a compact interactive world map that filters saved sessions by mapped origin.
 - The SQLite database is created automatically at `instance/roasts.db`.
 - Recent roast history is loaded from `GET /api/roasts`.
 - Roast review shows the actual graph curve that will be saved before the final `POST /api/roasts`.
 - Post-roast rating and tasting notes are updated later through `PATCH /api/roasts/<id>` from the dedicated lookup edit page.
+- Console logging now covers startup, route hits, roast saves, feedback edits, socket controls, and periodic sensor samples for testing.
 
 ## Useful Environment Variables
 
