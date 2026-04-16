@@ -1,6 +1,6 @@
 # Continuation Notes
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Purpose
 
@@ -254,8 +254,9 @@ Then verify:
 2. Roast setup opens `/roast/session`.
 3. Roast review opens after `Finish`.
 4. Roast review shows the graph preview before save.
-5. Lookup displays saved roasts and links to post-roast edit.
-6. `/api/sensor/health` returns expected hardware status.
+5. Dashboard origin markers and origin rollup entries are clickable.
+6. Lookup displays saved roasts, the compact origin filter map, and links to post-roast edit.
+7. `/api/sensor/health` returns expected hardware status.
 
 ## Test Coverage Snapshot
 
@@ -277,6 +278,16 @@ Recent manual verification also covered:
 - interactive lookup origin filtering
 - testing logs during app startup and socket control
 
+Latest automated verification:
+
+- `PYTHONPATH=. pytest -q`
+  - 14 passed on 2026-04-16
+
+Latest local commits:
+
+- `eff79fc` Add interactive origin maps and testing logs
+- `79b910a` Add roast review graph and post-roast feedback flow
+
 If you add new hardware features, extend:
 
 - `tests/test_sensor_service.py`
@@ -285,6 +296,8 @@ If you add new hardware features, extend:
 ## Notes For Future Me
 
 - Start by reading `docs/architecture.md` if you need the big picture.
+- Start by reading `docs/continuation.md` first if resuming after a break.
 - Start by reading `app/static/js/roast_session.js` if the next task is roast-flow related.
+- Start by reading `app/static/js/origin_map.js` if the next task is map or origin matching related.
 - Start by reading `app/services/sensor_service.py` if the next task is Pi hardware related.
 - Start by reading `app/services/roast_storage.py` if the next task is persistence related.
