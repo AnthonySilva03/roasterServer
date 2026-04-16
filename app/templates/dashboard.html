@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Roaster Server{% endblock %}
+{% block content %}
+<main class="page-grid">
+    <section class="hero-grid">
+        <article class="panel strong panel-pad">
+            <div class="eyebrow">Live Dashboard</div>
+            <h1 class="hero-title">Track roast days across the month at a glance.</h1>
+            <p class="copy">
+                This page is now your high-level dashboard. Use it to see sensor status,
+                then scan the month for roast activity and jump into roasting or lookup work.
+            </p>
+            <div class="controls">
+                <button class="primary" data-command="start">Start stream</button>
+                <button class="secondary" data-command="stop">Pause stream</button>
+                <button class="secondary" data-command="reset">Reset values</button>
+            </div>
+            <div id="dashboardMessage" class="message strong"></div>
+        </article>
+
+        <aside class="panel panel-pad status-stack">
+            <div class="status-pill">Status: <span id="sensorStatus">Connecting...</span></div>
+            <div class="status-pill">Source: <span id="sensorSource">Unknown</span></div>
+            <div class="status-pill">Updated: <span id="lastUpdated">Waiting for data</span></div>
+            <div class="status-pill">Latest temp: <span id="latestTemperature">--.- °C</span></div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel panel-pad">
+            <div class="calendar-toolbar">
+                <div>
+                    <h2 class="section-title" id="calendarTitle">Monthly Roast Calendar</h2>
+                    <p class="helper-text" id="calendarSubtitle">Loading roast sessions for this month.</p>
+                </div>
+                <div class="inline-controls">
+                    <button class="ghost" type="button" id="calendarPrevButton">Previous</button>
+                    <button class="secondary" type="button" id="calendarTodayButton">Today</button>
+                    <button class="ghost" type="button" id="calendarNextButton">Next</button>
+                </div>
+            </div>
+            <div class="calendar-weekdays">
+                <div>Sun</div>
+                <div>Mon</div>
+                <div>Tue</div>
+                <div>Wed</div>
+                <div>Thu</div>
+                <div>Fri</div>
+                <div>Sat</div>
+            </div>
+            <div id="roastCalendar" class="calendar-grid"></div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="section-title">Roasts On Selected Day</h2>
+                <p class="helper-text" id="selectedDayLabel">Choose a date on the calendar.</p>
+            </div>
+            <div id="calendarDayList" class="history-list">
+                <div class="empty-state">No roast day selected.</div>
+            </div>
+            <div class="summary-block">
+                <div class="metric-label">Month Summary</div>
+                <div class="detail-copy" id="calendarMonthSummary">No roasts loaded yet.</div>
+            </div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="section-title">Hardware Health</h2>
+                <p class="helper-text" id="hardwareHealthSummary">Checking Raspberry Pi sensor and servo health.</p>
+            </div>
+            <div class="three-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Temperature Sensor</div>
+                    <div id="temperatureHealth" class="health-value">Checking...</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Servo Controller</div>
+                    <div id="servoHealth" class="health-value">Checking...</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Current Speed</div>
+                    <div id="hardwareSpeed" class="health-value">--%</div>
+                </div>
+            </div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="summary-block">
+                <div class="metric-label">Hardware Mode</div>
+                <div id="hardwareMode" class="detail-copy">Unknown</div>
+            </div>
+            <div class="summary-block">
+                <div class="metric-label">Last Hardware Error</div>
+                <div id="hardwareError" class="detail-copy">No status yet.</div>
+            </div>
+            <div class="summary-block">
+                <div class="metric-label">Quick Check</div>
+                <div class="detail-copy">The dashboard polls the same `/api/sensor/health` endpoint used by the tests.</div>
+            </div>
+        </aside>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

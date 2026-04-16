@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Roasting | Roaster Server{% endblock %}
+
+{% block content %}
+<main class="page-grid">
+    <section class="hero-grid">
+        <article class="panel strong panel-pad">
+            <div class="eyebrow">Roast Setup</div>
+            <h1 class="hero-title">Enter roast details, then launch the active roast view.</h1>
+            <p class="copy">
+                Start here before a batch. Add the bean name and origin, then move into the live
+                roast screen with an empty temperature graph and roast-stage controls.
+            </p>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="status-pill">Flow: Setup -> Roast -> Finish</div>
+            <div class="status-pill">Lookup: Saved batches appear in the lookup page</div>
+            <div class="status-pill">Sensor: Uses live temperature when available</div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel panel-pad">
+            <h2 class="section-title">Roast Information</h2>
+            <form action="{{ url_for('main.roast_session_page') }}" method="get" class="detail-stack">
+                <div class="field-grid">
+                    <label>
+                        Bean Name
+                        <input name="bean_name" required placeholder="Ethiopia Guji">
+                    </label>
+                    <label>
+                        Origin Location
+                        <input name="origin" required placeholder="Sidama, Ethiopia">
+                    </label>
+                    <label>
+                        Roast Level
+                        <select name="roast_level">
+                            <option value="Light">Light</option>
+                            <option value="Medium" selected>Medium</option>
+                            <option value="Dark">Dark</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button class="primary" type="submit">Start Roast</button>
+                    <a class="nav-link" href="{{ url_for('main.lookup_page') }}">View Roast History</a>
+                </div>
+            </form>
+        </article>
+
+        <aside class="panel panel-pad">
+            <h2 class="section-title">Recent Roasts</h2>
+            <div id="roastHistory" class="history-list">
+                <div class="history-item">Loading roast history...</div>
+            </div>
+        </aside>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/roast_setup.js') }}"></script>
+{% endblock %}

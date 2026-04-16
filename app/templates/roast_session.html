@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Active Roast | Roaster Server{% endblock %}
+{% block body_attrs %}
+data-max-points="{{ max_chart_points }}"
+data-bean-name="{{ bean_name }}"
+data-origin="{{ origin }}"
+data-roast-level="{{ roast_level }}"
+{% endblock %}
+
+{% block content %}
+<main class="page-grid">
+    <section class="hero-grid">
+        <article class="panel strong panel-pad">
+            <div class="eyebrow">Active Roast</div>
+            <h1 class="hero-title">{{ bean_name or "Unnamed Roast" }}</h1>
+            <p class="copy">
+                Origin: {{ origin or "Unknown origin" }}<br>
+                Roast level target: {{ roast_level }}
+            </p>
+            <div id="sessionMessage" class="message strong">Roast view ready. Use Pre Roast to clear the graph before charging the drum.</div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="status-pill">Status: <span id="sensorStatus">Connecting...</span></div>
+            <div class="status-pill">Source: <span id="sensorSource">Unknown</span></div>
+            <div class="status-pill">Updated: <span id="lastUpdated">Waiting for data</span></div>
+            <div class="status-pill">Current temp: <span id="temperatureValue">--.- °C</span></div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel chart-card">
+            <h2 class="chart-title">Temperature Graph</h2>
+            <canvas id="temperatureChart"></canvas>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="section-title">Speed Controller</h2>
+                <label>
+                    Drum Speed
+                    <input id="speedControl" type="range" min="0" max="100" step="5" value="50">
+                </label>
+                <div class="helper-text">Current setting: <span id="speedValue">50%</span></div>
+            </div>
+
+            <div>
+                <h2 class="section-title">Roast Controls</h2>
+                <div class="control-grid">
+                    <button class="secondary" type="button" id="preRoastButton">Pre Roast</button>
+                    <button class="primary" type="button" id="startRoastButton">Start</button>
+                    <button class="ghost" type="button" id="firstCrackButton">First Crack</button>
+                    <button class="ghost" type="button" id="secondCrackButton">Second Crack</button>
+                    <button class="primary" type="button" id="finishRoastButton">Finish</button>
+                </div>
+            </div>
+
+            <div class="summary-block">
+                <div class="metric-label">Roast Event Log</div>
+                <div id="eventLog" class="history-list">
+                    <div class="empty-state">No roast events marked yet.</div>
+                </div>
+            </div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel panel-pad detail-stack" id="roastHardwarePanel">
+            <div>
+                <h2 class="section-title">Hardware Health</h2>
+                <p class="helper-text" id="roastHealthSummary">Checking Raspberry Pi sensor and servo hardware.</p>
+            </div>
+            <div id="roastLatestIssue" class="hardware-issue-banner" style="display: none;">
+                <div class="metric-label">Latest Hardware Issue</div>
+                <div id="roastLatestIssueText" class="detail-copy"></div>
+            </div>
+            <div class="three-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Temperature Sensor</div>
+                    <div id="roastTemperatureHealth" class="health-value">Checking...</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Servo Controller</div>
+                    <div id="roastServoHealth" class="health-value">Checking...</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Controller Speed</div>
+                    <div id="roastHardwareSpeed" class="health-value">--%</div>
+                </div>
+            </div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="summary-block">
+                <div class="metric-label">Hardware Mode</div>
+                <div id="roastHardwareMode" class="detail-copy">Unknown</div>
+            </div>
+            <div class="summary-block">
+                <div class="metric-label">Last Hardware Error</div>
+                <div id="roastHardwareError" class="detail-copy">No status yet.</div>
+            </div>
+        </aside>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/roast_session.js') }}"></script>
+{% endblock %}

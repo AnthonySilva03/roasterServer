@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Roast Review | Roaster Server{% endblock %}
+
+{% block content %}
+<main class="page-grid">
+    <section class="hero-grid">
+        <article class="panel strong panel-pad">
+            <div class="eyebrow">Roast Review</div>
+            <h1 class="hero-title">Review the roast before saving it.</h1>
+            <p class="copy">
+                Check the roast summary, attach a photo from your phone or device camera, then save or cancel.
+            </p>
+            <div id="reviewMessage" class="message strong">Loading roast summary...</div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="status-pill">Save only after review</div>
+            <div class="status-pill">Cancel returns to dashboard with no database write</div>
+            <div class="status-pill">Photo upload is optional</div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="section-title" id="reviewTitle">Pending Roast</h2>
+                <p class="detail-copy" id="reviewSubtitle">The roast summary will appear here.</p>
+            </div>
+            <div class="three-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Origin</div>
+                    <div id="reviewOrigin">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Roast Level</div>
+                    <div id="reviewRoastLevel">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Samples</div>
+                    <div id="reviewSampleCount">--</div>
+                </div>
+            </div>
+            <div class="summary-block">
+                <div class="metric-label">Event Timeline</div>
+                <div id="reviewEvents" class="history-list">
+                    <div class="empty-state">No events captured.</div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="primary" type="button" id="saveRoastButton">Save Roast</button>
+                <button class="ghost" type="button" id="cancelRoastButton">Cancel</button>
+            </div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="section-title">Attach Roast Photo</h2>
+                <label>
+                    Choose image
+                    <input id="photoInput" type="file" accept="image/*" capture="environment">
+                </label>
+                <p class="helper-text">On a phone, this can open the camera so you can add a roast photo before saving.</p>
+            </div>
+            <div id="photoPreviewWrap" class="summary-block" style="display: none;">
+                <div class="metric-label">Photo Preview</div>
+                <img id="photoPreview" alt="Roast preview" class="photo-preview">
+            </div>
+        </aside>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/roast_review.js') }}"></script>
+{% endblock %}

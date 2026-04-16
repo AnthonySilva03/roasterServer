@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Roaster Server{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body {% block body_attrs %}{% endblock %}>
+    <div class="site-shell">
+        <header class="site-header">
+            <div class="brand-block">
+                <div class="eyebrow">Roaster Server</div>
+                <div class="brand-title">Coffee roast telemetry workspace</div>
+                <div class="brand-copy">Live monitoring, roast capture, and roast lookup in one place.</div>
+            </div>
+            <nav class="site-nav">
+                <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard</a>
+                <a class="nav-link {% if active_page == 'roast' %}active{% endif %}" href="{{ url_for('main.roast_page') }}">Roasting</a>
+                <a class="nav-link {% if active_page == 'lookup' %}active{% endif %}" href="{{ url_for('main.lookup_page') }}">Lookup</a>
+            </nav>
+        </header>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="{{ url_for('static', filename='js/live_charts.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

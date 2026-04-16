@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Lookup | Roaster Server{% endblock %}
+
+{% block content %}
+<main class="page-grid">
+    <section class="hero-grid">
+        <article class="panel strong panel-pad">
+            <div class="eyebrow">Roast Lookup</div>
+            <h1 class="hero-title">Review saved roast sessions and compare curve history.</h1>
+            <p class="copy">
+                Search through saved batches, inspect roast notes, and graph the curve you captured
+                during roasting.
+            </p>
+            <div class="inline-controls">
+                <button class="primary" id="refreshLookupButton" type="button">Refresh list</button>
+            </div>
+        </article>
+
+        <aside class="panel panel-pad">
+            <h2 class="section-title">Database Snapshot</h2>
+            <div class="summary-grid">
+                <div class="summary-block">
+                    <div class="summary-number" id="summaryRoasts">0</div>
+                    <div class="summary-label">Saved roasts</div>
+                </div>
+                <div class="summary-block">
+                    <div class="summary-number" id="summarySamples">0</div>
+                    <div class="summary-label">Captured samples</div>
+                </div>
+                <div class="summary-block">
+                    <div class="summary-number" id="summaryLevels">0</div>
+                    <div class="summary-label">Roast levels used</div>
+                </div>
+            </div>
+            <p class="helper-text" id="summaryLatest">No saved roast sessions yet.</p>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <aside class="panel panel-pad">
+            <h2 class="section-title">Saved Sessions</h2>
+            <div id="lookupList" class="lookup-list">
+                <div class="empty-state">No roast sessions saved yet.</div>
+            </div>
+        </aside>
+
+        <article class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="detail-title" id="detailTitle">Choose a roast session</h2>
+                <p class="detail-copy" id="detailCopy">The selected roast’s notes, timing, and saved curve will appear here.</p>
+            </div>
+            <div class="three-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Origin</div>
+                    <div id="detailOrigin">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Roast Level</div>
+                    <div id="detailLevel">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Samples</div>
+                    <div id="detailSamples">--</div>
+                </div>
+            </div>
+            <div class="summary-block">
+                <div class="metric-label">Notes</div>
+                <div id="detailNotes" class="detail-copy">No roast selected.</div>
+            </div>
+            <div id="detailPhotoWrap" class="summary-block" style="display: none;">
+                <div class="metric-label">Roast Photo</div>
+                <img id="detailPhoto" alt="Saved roast" class="photo-preview">
+            </div>
+            <div class="summary-block">
+                <div class="metric-label">Stage Events</div>
+                <div id="detailEvents" class="history-list">
+                    <div class="empty-state">No event markers saved.</div>
+                </div>
+            </div>
+            <div class="two-grid">
+                <article class="panel chart-card">
+                    <h3 class="chart-title">Saved Temperature Curve</h3>
+                    <canvas id="lookupTemperatureChart"></canvas>
+                </article>
+            </div>
+        </article>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/lookup_page.js') }}"></script>
+{% endblock %}
