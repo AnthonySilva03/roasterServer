@@ -11,7 +11,8 @@ Roaster Server is a Flask and Socket.IO dashboard for tracking live roast teleme
 - Plots saved roast origins on interactive global maps using region and country matching from saved origin names.
 - Saves roast session metadata, event markers, optional photo data, and the current chart curve to `instance/roasts.db`.
 - Calculates roast analytics like duration, development time, ratio, and peak temperature from captured curves.
-- Supports post-roast cup ratings and tasting notes from a dedicated edit page after the beans are brewed or cupped.
+- Supports post-roast editing for roast metadata, roast notes, cup ratings, and tasting notes from a dedicated edit page after the beans are brewed or cupped.
+- Lets users remove saved roasts directly from the lookup page.
 - Exposes simple HTTP endpoints for listing roasts, saving roasts, and checking hardware health.
 
 ## Visual Overview
@@ -94,6 +95,7 @@ The app binds to `0.0.0.0:5000` by default, so it is reachable from your local n
 /roast           Roast setup
                  - bean name
                  - origin
+                 - batch weight
                  - start roast
 
 /roast/session   Active roast
@@ -105,6 +107,8 @@ The app binds to `0.0.0.0:5000` by default, so it is reachable from your local n
 /roast/review    Review before save
                  - summary
                  - roast analytics
+                 - total roast time
+                 - batch weight
                  - graph preview to be saved
                  - photo upload
                  - save or cancel
@@ -113,14 +117,17 @@ The app binds to `0.0.0.0:5000` by default, so it is reachable from your local n
                  - global origin filter map
                  - roast list
                  - roast analytics
+                 - edit roast link
+                 - remove roast button
                  - cup rating + tasting notes
                  - curve with event badges
                  - saved photo
 
 /lookup/<id>/edit
-                 - post-roast rating edit
-                 - tasting notes
-                 - feedback saved after cupping
+                 - edit bean, origin, level, and weight
+                 - edit roast notes
+                 - edit rating and tasting notes
+                 - saved after cupping
 ```
 
 ### Shortcuts
@@ -155,6 +162,7 @@ The test suite is split into:
 
 - `tests/test_sensor_service.py` for sensor reader behavior and `pigpio` handling.
 - `tests/test_app.py` for page rendering, roast API behavior, and post-roast feedback editing.
+- `tests/test_app.py` for page rendering, roast API behavior, roast editing, roast deletion, and post-roast feedback editing.
 
 If `pytest` cannot import `app` in your local shell, run:
 
@@ -244,7 +252,8 @@ Expected shape:
 
 - `GET /api/roasts` returns recent roast sessions.
 - `POST /api/roasts` saves a roast session and its captured curve.
-- `PATCH /api/roasts/<id>` updates post-roast rating and tasting notes.
+- `PATCH /api/roasts/<id>` updates editable saved-roast properties after roasting.
+- `DELETE /api/roasts/<id>` removes a saved roast.
 - `GET /api/sensor/health` returns temperature and servo hardware health.
 
 Example payload:
@@ -254,8 +263,10 @@ Example payload:
   "bean_name": "Guatemala Huehuetenango",
   "origin": "Huehuetenango, Guatemala",
   "roast_level": "Medium",
+  "weight_grams": 350,
   "started_at": "2026-04-15T09:30:00Z",
   "ended_at": "2026-04-15T09:42:00Z",
+  "total_roast_seconds": 720,
   "notes": "Lower airflow at turning point",
   "curve": [
     {

@@ -9,11 +9,11 @@ This document is a restart point for future development sessions. It summarizes 
 ## Current Priorities
 
 1. Improve the active roast workflow with richer roast analytics.
-   - Implemented: roast duration, development time, development ratio, and peak temperature now appear across the roast flow.
+   - Implemented: roast duration, development time, development ratio, peak temperature, batch weight, and saved total roast time now appear across the roast flow.
    - Good follow-up candidates: turn-point detection, stronger graph annotations, and comparative batch overlays.
 
 2. Improve persistence for media and roast records.
-   - Implemented: post-roast cup ratings and tasting notes now save separately from roast-time notes through a dedicated edit flow.
+   - Implemented: saved roasts now support full post-roast editing for bean/origin/level/weight/notes plus tasting feedback, and they can be deleted from lookup.
    - The biggest near-term win is still moving photo storage out of SQLite data URLs.
 
 3. Improve Raspberry Pi hardware polish.
@@ -34,6 +34,7 @@ Roast setup
   -> bean name
   -> origin
   -> roast level
+  -> batch weight
 
 Active roast session
   -> live temperature graph
@@ -43,6 +44,7 @@ Active roast session
 
 Roast review
   -> summary before save
+  -> batch weight + total roast time
   -> graph preview of the exact curve to be saved
   -> optional photo upload
   -> save or cancel
@@ -51,10 +53,14 @@ Lookup
   -> saved roast list + search
   -> compact global origin filter map
   -> temperature curve with event badges
+  -> edit roast button
+  -> remove roast button
   -> cup rating and tasting notes display
   -> saved photo
 
 Post-roast edit
+  -> edit bean/origin/level/weight
+  -> edit roast notes
   -> rating after tasting
   -> taste notes after brewing/cupping
 ```
@@ -72,8 +78,11 @@ Post-roast edit
   - The active roast page stores a pending roast in browser `sessionStorage`.
   - The review page shows the exact graph curve that will be saved, then decides whether to save or cancel.
 - Cup feedback is intentionally separate from roast capture.
-  - Rating and tasting notes can only be edited later from the lookup edit page.
+  - Saved roast properties can be edited later from the lookup edit page.
+  - Rating and tasting notes can only be added once the roast has been saved.
   - This keeps roast-time observations separate from after-tasting impressions.
+- Delete is explicit and manual from lookup.
+  - Saved roasts can now be removed from the lookup detail panel after confirmation.
 - Hardware issues during roasting are:
   - shown in the roast-session hardware widget
   - recorded into the roast event log
@@ -113,7 +122,8 @@ Post-roast edit
 - `app/services/roast_storage.py`
   - SQLite setup
   - roast session persistence
-  - stores curve, events, and photo data
+  - stores curve, events, photo data, batch weight, and total roast time
+  - supports roast updates and deletion
 
 ### Frontend
 
@@ -140,10 +150,11 @@ Post-roast edit
 - `app/templates/lookup.html`
   - saved roast browser
   - map-based origin filter
+  - edit/remove actions
   - read-only tasting feedback
 
 - `app/templates/lookup_edit.html`
-  - post-roast feedback editor
+  - full post-roast editor
 
 - `app/static/js/dashboard.js`
   - dashboard calendar and health panel
@@ -163,11 +174,12 @@ Post-roast edit
   - roast detail loading
   - origin map filtering
   - event badges on saved graph
+  - edit/remove actions
   - tasting feedback display
   - saved photo display
 
 - `app/static/js/lookup_edit.js`
-  - post-roast feedback loading and saving
+  - post-roast property loading and saving
 
 - `app/static/js/origin_map.js`
   - shared coffee-region geo matching
@@ -178,6 +190,8 @@ Post-roast edit
 The `roast_sessions` table currently stores:
 
 - roast metadata
+- `weight_grams`
+- `total_roast_seconds`
 - `curve_json`
 - `events_json`
 - `photo_data`
@@ -223,10 +237,9 @@ Choose one of these when resuming:
    - add graph annotations beyond vertical markers
 
 2. Improve persistence
-   - move photos from SQLite data URLs to file storage
-   - add export/import for roast sessions
-   - add delete support for saved roasts
-   - consider richer tasting-history tracking per roast
+  - move photos from SQLite data URLs to file storage
+  - add export/import for roast sessions
+  - consider richer tasting-history tracking per roast
 
 3. Improve hardware integration
    - add explicit servo calibration UI
@@ -256,7 +269,9 @@ Then verify:
 4. Roast review shows the graph preview before save.
 5. Dashboard origin markers and origin rollup entries are clickable.
 6. Lookup displays saved roasts, the compact origin filter map, and links to post-roast edit.
-7. `/api/sensor/health` returns expected hardware status.
+7. Lookup edit saves roast property changes correctly.
+8. Lookup remove deletes the selected roast and refreshes the list.
+9. `/api/sensor/health` returns expected hardware status.
 
 ## Test Coverage Snapshot
 

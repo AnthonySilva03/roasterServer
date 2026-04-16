@@ -22,7 +22,7 @@ run app
     +--> start roast
     |      |
     |      v
-    |   review + graph + photo
+    |   review + graph + weight + time + photo
     |      |
     |      v
     |   save to database
@@ -30,7 +30,7 @@ run app
     +--> lookup saved roasts
            |
            v
-        edit cup feedback
+        edit roast properties or delete roast
 ```
 
 Helper commands are also available:
@@ -60,7 +60,9 @@ Or with the helper script:
 - The SQLite database is created automatically at `instance/roasts.db`.
 - Recent roast history is loaded from `GET /api/roasts`.
 - Roast review shows the actual graph curve that will be saved before the final `POST /api/roasts`.
-- Post-roast rating and tasting notes are updated later through `PATCH /api/roasts/<id>` from the dedicated lookup edit page.
+- Roast setup now captures batch weight, and saved roasts persist both `weight_grams` and `total_roast_seconds`.
+- The lookup edit page now updates saved roast metadata, roast notes, rating, and tasting notes through `PATCH /api/roasts/<id>`.
+- Saved roasts can be removed from the lookup page through `DELETE /api/roasts/<id>`.
 - Console logging now covers startup, route hits, roast saves, feedback edits, socket controls, and periodic sensor samples for testing.
 
 ## Useful Environment Variables
@@ -164,6 +166,7 @@ tests/test_app.py
   -> roast create/detail
   -> roast summary
   -> lookup edit page
-  -> roast feedback patch
+  -> roast property patch
+  -> roast delete flow
   -> sensor health endpoint
 ```

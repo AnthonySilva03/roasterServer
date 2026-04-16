@@ -6,6 +6,7 @@ data-max-points="{{ max_chart_points }}"
 data-bean-name="{{ bean_name }}"
 data-origin="{{ origin }}"
 data-roast-level="{{ roast_level }}"
+data-weight-grams="{{ weight_grams }}"
 {% endblock %}
 
 {% block content %}
@@ -16,7 +17,8 @@ data-roast-level="{{ roast_level }}"
             <h1 class="hero-title">{{ bean_name or "Unnamed Roast" }}</h1>
             <p class="copy">
                 Origin: {{ origin or "Unknown origin" }}<br>
-                Roast level target: {{ roast_level }}
+                Roast level target: {{ roast_level }}<br>
+                Batch weight: {{ weight_grams or "--" }} g
             </p>
             <div id="sessionMessage" class="message strong">Roast view ready. Use Pre Roast to clear the graph before charging the drum.</div>
         </article>

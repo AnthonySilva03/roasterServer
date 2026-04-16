@@ -10,7 +10,7 @@ logger = logging.getLogger("roasterServer.sockets")
 sensor_service = None
 latest_sample = None
 background_started = False
-sensor_interval_seconds = 2.0
+sensor_interval_seconds = 2
 sensor_log_every_n = 10
 sample_counter = 0
 

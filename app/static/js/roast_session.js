@@ -3,6 +3,7 @@ const roastSessionMaxPoints = Number(document.body.dataset.maxPoints || 30);
 const beanName = document.body.dataset.beanName || "Unnamed Roast";
 const origin = document.body.dataset.origin || "Unknown origin";
 const roastLevel = document.body.dataset.roastLevel || "Medium";
+const roastWeightGrams = document.body.dataset.weightGrams || "";
 
 const sessionMessageEl = document.getElementById("sessionMessage");
 const sensorStatusEl = document.getElementById("sensorStatus");
@@ -224,11 +225,16 @@ function buildPendingRoastPayload() {
         bean_name: beanName,
         origin,
         roast_level: roastLevel,
+        weight_grams: roastWeightGrams ? Number(roastWeightGrams) : null,
+        total_roast_seconds: analytics.totalDurationSeconds !== null
+            ? Math.round(analytics.totalDurationSeconds)
+            : null,
         started_at: startedAt,
         ended_at: endedAt,
         created_at: endedAt,
         notes: [
             `Pre-roast used: ${explicitPreRoast ? "yes" : "no"}`,
+            `Batch weight: ${roastWeightGrams ? `${roastWeightGrams} g` : "--"}`,
             `Final speed setting: ${speedControlEl.value}%`,
             analyticsNotes,
             stageNotes,

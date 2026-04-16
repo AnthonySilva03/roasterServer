@@ -1,25 +1,27 @@
 {% extends "base.html" %}
 
-{% block title %}Edit Tasting Notes | Roaster Server{% endblock %}
+{% block title %}Edit Roast | Roaster Server{% endblock %}
 {% block body_attrs %}data-roast-id="{{ roast_id }}"{% endblock %}
 
 {% block content %}
 <main class="page-grid">
     <section class="hero-grid">
         <article class="panel strong panel-pad">
-            <div class="eyebrow">Post-Roast Edit</div>
-            <h1 class="hero-title">Rate the cup after tasting the beans.</h1>
+            <div class="eyebrow">Roast Editor</div>
+            <h1 class="hero-title">Edit saved roast details after roasting and tasting.</h1>
             <p class="copy">
-                This page is reserved for post-roast feedback. Use it after brewing or cupping so
-                saved roasts can carry real tasting notes instead of guesses made during roasting.
+                Use this page to correct roast metadata and add post-brew notes once you have
+                actually tried the coffee. The captured graph, timestamps, and stage events remain
+                read-only so the roast record keeps its original curve history.
             </p>
             <div id="editFeedbackMessage" class="message strong">Loading roast details...</div>
         </article>
 
         <aside class="panel panel-pad detail-stack">
             <div class="status-pill">Editing happens after roasting</div>
+            <div class="status-pill">Batch weight and roast notes are editable</div>
             <div class="status-pill">Ratings use a 1 to 5 scale</div>
-            <div class="status-pill">Taste notes stay attached to the saved roast</div>
+            <div class="status-pill">Curve data stays unchanged</div>
         </aside>
     </section>
 
@@ -40,22 +42,56 @@
                     <div id="editRoastLevel">--</div>
                 </div>
                 <div class="summary-block">
-                    <div class="metric-label">Current Rating</div>
-                    <div id="editRoastCurrentRating">Not rated</div>
+                    <div class="metric-label">Batch Weight</div>
+                    <div id="editRoastCurrentWeight">--</div>
                 </div>
             </div>
 
             <div class="summary-block">
+                <div class="metric-label">Saved Roast Notes</div>
+                <div id="editRoastCurrentNotes" class="detail-copy">No roast notes saved yet.</div>
+            </div>
+
+            <div class="summary-block">
                 <div class="metric-label">Existing Taste Notes</div>
-                <div id="editRoastCurrentNotes" class="detail-copy">No tasting notes saved yet.</div>
+                <div id="editRoastCurrentTasteNotes" class="detail-copy">No tasting notes saved yet.</div>
             </div>
         </article>
 
         <aside class="panel panel-pad detail-stack">
             <div>
-                <h2 class="section-title">Cup Feedback</h2>
-                <p class="helper-text">Update this after you have brewed or cupped the coffee.</p>
+                <h2 class="section-title">Editable Roast Properties</h2>
+                <p class="helper-text">Update the saved roast record after roasting and tasting.</p>
             </div>
+
+            <label>
+                Bean Name
+                <input id="editBeanNameInput" placeholder="Ethiopia Guji">
+            </label>
+
+            <label>
+                Origin
+                <input id="editOriginInput" placeholder="Sidama, Ethiopia">
+            </label>
+
+            <label>
+                Roast Level
+                <select id="editRoastLevelInput">
+                    <option value="Light">Light</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Dark">Dark</option>
+                </select>
+            </label>
+
+            <label>
+                Batch Weight (g)
+                <input id="editWeightInput" type="number" min="1" step="0.1" placeholder="350">
+            </label>
+
+            <label>
+                Roast Notes
+                <textarea id="editRoastNotesInput" placeholder="Capture roast observations, milestone notes, and what you want to change next time."></textarea>
+            </label>
 
             <label>
                 Rating
@@ -75,7 +111,7 @@
             </label>
 
             <div class="form-actions">
-                <button class="primary" type="button" id="saveTasteFeedbackButton">Save Feedback</button>
+                <button class="primary" type="button" id="saveTasteFeedbackButton">Save Roast Changes</button>
                 <a class="ghost button-link" href="{{ url_for('main.lookup_page') }}">Back to Lookup</a>
             </div>
         </aside>

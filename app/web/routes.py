@@ -4,11 +4,12 @@ from flask import Blueprint, abort, current_app, jsonify, render_template, reque
 
 from app import sockets as sockets_module
 from app.services.roast_storage import (
+    delete_roast_session,
     get_roast_session,
     get_roast_summary,
     list_roast_sessions,
     save_roast_session,
-    update_roast_feedback,
+    update_roast_session,
 )
 
 
@@ -39,6 +40,7 @@ def roast_session_page():
     bean_name = request.args.get("bean_name", "").strip()
     origin = request.args.get("origin", "").strip()
     roast_level = request.args.get("roast_level", "Medium").strip() or "Medium"
+    weight_grams = request.args.get("weight_grams", "").strip()
 
     current_app.logger.info(
         "Rendered roast session page",
@@ -46,6 +48,7 @@ def roast_session_page():
             "bean_name": bean_name or "Unnamed Roast",
             "origin": origin or "Unknown origin",
             "roast_level": roast_level,
+            "weight_grams": weight_grams or "--",
         },
     )
 
@@ -56,6 +59,7 @@ def roast_session_page():
         bean_name=bean_name,
         origin=origin,
         roast_level=roast_level,
+        weight_grams=weight_grams,
     )
 
 
@@ -120,8 +124,32 @@ def get_roast(roast_id):
 @main.route("/api/roasts/<int:roast_id>", methods=["PATCH"])
 def patch_roast(roast_id):
     payload = request.get_json(silent=True) or {}
+    bean_name = str(payload.get("bean_name", "")).strip()
+    origin = str(payload.get("origin", "")).strip()
+    roast_level = str(payload.get("roast_level", "")).strip()
+    notes = str(payload.get("notes", "")).strip()
     rating = payload.get("rating")
     taste_notes = str(payload.get("taste_notes", "")).strip()
+    weight_grams = payload.get("weight_grams")
+
+    if not bean_name or not origin or not roast_level:
+        current_app.logger.warning(
+            "Rejected roast update due to missing editable fields",
+            extra={"roast_id": roast_id},
+        )
+        return jsonify({"error": "Bean name, origin, and roast level are required."}), 400
+
+    if weight_grams in ("", None):
+        normalized_weight_grams = None
+    else:
+        try:
+            normalized_weight_grams = round(float(weight_grams), 2)
+        except (TypeError, ValueError):
+            current_app.logger.warning(
+                "Rejected roast update due to invalid weight",
+                extra={"roast_id": roast_id, "weight_grams": weight_grams},
+            )
+            return jsonify({"error": "Weight must be a valid number in grams."}), 400
 
     if rating in ("", None):
         normalized_rating = None
@@ -136,9 +164,14 @@ def patch_roast(roast_id):
             current_app.logger.warning("Rejected roast feedback update due to rating bounds", extra={"roast_id": roast_id, "rating": normalized_rating})
             return jsonify({"error": "Rating must be between 1 and 5."}), 400
 
-    roast = update_roast_feedback(
+    roast = update_roast_session(
         roast_id,
         {
+            "bean_name": bean_name,
+            "origin": origin,
+            "roast_level": roast_level,
+            "weight_grams": normalized_weight_grams,
+            "notes": notes,
             "rating": normalized_rating,
             "taste_notes": taste_notes,
         },
@@ -148,15 +181,31 @@ def patch_roast(roast_id):
         abort(404)
 
     current_app.logger.info(
-        "Updated roast feedback",
+        "Updated roast session",
         extra={
             "roast_id": roast_id,
+            "bean_name": bean_name,
+            "origin": origin,
+            "roast_level": roast_level,
+            "weight_grams": normalized_weight_grams,
             "rating": normalized_rating,
+            "notes_length": len(notes),
             "taste_notes_length": len(taste_notes),
         },
     )
 
     return jsonify(roast)
+
+
+@main.route("/api/roasts/<int:roast_id>", methods=["DELETE"])
+def delete_roast(roast_id):
+    deleted = delete_roast_session(roast_id)
+    if not deleted:
+        current_app.logger.warning("Attempted to delete missing roast", extra={"roast_id": roast_id})
+        abort(404)
+
+    current_app.logger.info("Deleted roast session", extra={"roast_id": roast_id})
+    return jsonify({"deleted": True, "roast_id": roast_id})
 
 
 @main.route("/api/roasts", methods=["POST"])
@@ -177,6 +226,24 @@ def create_roast():
         current_app.logger.warning("Rejected roast create request due to missing fields", extra={"missing_fields": ", ".join(missing)})
         return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
 
+    weight_grams = payload.get("weight_grams")
+    if weight_grams in ("", None):
+        payload["weight_grams"] = None
+    else:
+        try:
+            payload["weight_grams"] = round(float(weight_grams), 2)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Weight must be a valid number in grams."}), 400
+
+    total_roast_seconds = payload.get("total_roast_seconds")
+    if total_roast_seconds in ("", None):
+        payload["total_roast_seconds"] = None
+    else:
+        try:
+            payload["total_roast_seconds"] = int(total_roast_seconds)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Total roast time must be a whole number of seconds."}), 400
+
     payload["created_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
     roast = save_roast_session(payload)
     current_app.logger.info(
@@ -185,6 +252,8 @@ def create_roast():
             "roast_id": roast["id"],
             "bean_name": roast["bean_name"],
             "origin": roast["origin"],
+            "weight_grams": roast["weight_grams"],
+            "total_roast_seconds": roast["total_roast_seconds"],
             "sample_count": roast["sample_count"],
         },
     )

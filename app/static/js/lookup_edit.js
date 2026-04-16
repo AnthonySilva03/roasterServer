@@ -5,8 +5,14 @@ const editRoastTitleEl = document.getElementById("editRoastTitle");
 const editRoastSubtitleEl = document.getElementById("editRoastSubtitle");
 const editRoastOriginEl = document.getElementById("editRoastOrigin");
 const editRoastLevelEl = document.getElementById("editRoastLevel");
-const editRoastCurrentRatingEl = document.getElementById("editRoastCurrentRating");
+const editRoastCurrentWeightEl = document.getElementById("editRoastCurrentWeight");
 const editRoastCurrentNotesEl = document.getElementById("editRoastCurrentNotes");
+const editRoastCurrentTasteNotesEl = document.getElementById("editRoastCurrentTasteNotes");
+const editBeanNameInputEl = document.getElementById("editBeanNameInput");
+const editOriginInputEl = document.getElementById("editOriginInput");
+const editRoastLevelInputEl = document.getElementById("editRoastLevelInput");
+const editWeightInputEl = document.getElementById("editWeightInput");
+const editRoastNotesInputEl = document.getElementById("editRoastNotesInput");
 const tasteRatingInputEl = document.getElementById("tasteRatingInput");
 const tasteNotesInputEl = document.getElementById("tasteNotesInput");
 const saveTasteFeedbackButtonEl = document.getElementById("saveTasteFeedbackButton");
@@ -25,8 +31,18 @@ function renderRoastFeedback(roast) {
     editRoastSubtitleEl.textContent = `Roasted ${formatLookupEditDate(roast.started_at)} through ${formatLookupEditDate(roast.ended_at)}.`;
     editRoastOriginEl.textContent = roast.origin || "--";
     editRoastLevelEl.textContent = roast.roast_level || "--";
-    editRoastCurrentRatingEl.textContent = roast.rating ? `${roast.rating}/5` : "Not rated";
-    editRoastCurrentNotesEl.textContent = roast.taste_notes || "No tasting notes saved yet.";
+    editRoastCurrentWeightEl.textContent = roast.weight_grams !== null && roast.weight_grams !== undefined
+        ? `${Number(roast.weight_grams).toFixed(1)} g`
+        : "--";
+    editRoastCurrentNotesEl.textContent = roast.notes || "No roast notes saved yet.";
+    editRoastCurrentTasteNotesEl.textContent = roast.taste_notes || "No tasting notes saved yet.";
+    editBeanNameInputEl.value = roast.bean_name || "";
+    editOriginInputEl.value = roast.origin || "";
+    editRoastLevelInputEl.value = roast.roast_level || "Medium";
+    editWeightInputEl.value = roast.weight_grams !== null && roast.weight_grams !== undefined
+        ? String(roast.weight_grams)
+        : "";
+    editRoastNotesInputEl.value = roast.notes || "";
     tasteRatingInputEl.value = roast.rating ? String(roast.rating) : "";
     tasteNotesInputEl.value = roast.taste_notes || "";
 }
@@ -39,11 +55,16 @@ async function loadRoastFeedback() {
 
     const roast = await response.json();
     renderRoastFeedback(roast);
-    editFeedbackMessageEl.textContent = "Update the cup score and tasting notes, then save.";
+    editFeedbackMessageEl.textContent = "Update roast details and post-brew notes, then save.";
 }
 
 saveTasteFeedbackButtonEl.addEventListener("click", async () => {
     const payload = {
+        bean_name: editBeanNameInputEl.value.trim(),
+        origin: editOriginInputEl.value.trim(),
+        roast_level: editRoastLevelInputEl.value,
+        weight_grams: editWeightInputEl.value ? Number(editWeightInputEl.value) : null,
+        notes: editRoastNotesInputEl.value.trim(),
         rating: tasteRatingInputEl.value ? Number(tasteRatingInputEl.value) : null,
         taste_notes: tasteNotesInputEl.value.trim(),
     };
@@ -63,7 +84,7 @@ saveTasteFeedbackButtonEl.addEventListener("click", async () => {
     }
 
     renderRoastFeedback(body);
-    editFeedbackMessageEl.textContent = "Cup feedback saved. Returning to lookup...";
+    editFeedbackMessageEl.textContent = "Roast changes saved. Returning to lookup...";
     window.setTimeout(() => {
         window.location.href = "/lookup";
     }, 900);

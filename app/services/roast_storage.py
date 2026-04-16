@@ -17,6 +17,8 @@ def init_db(app):
                 bean_name TEXT NOT NULL,
                 origin TEXT NOT NULL,
                 roast_level TEXT NOT NULL,
+                weight_grams REAL,
+                total_roast_seconds INTEGER,
                 notes TEXT NOT NULL,
                 taste_notes TEXT NOT NULL DEFAULT '',
                 rating INTEGER,
@@ -49,6 +51,14 @@ def init_db(app):
             connection.execute(
                 "ALTER TABLE roast_sessions ADD COLUMN rating INTEGER"
             )
+        if "weight_grams" not in existing_columns:
+            connection.execute(
+                "ALTER TABLE roast_sessions ADD COLUMN weight_grams REAL"
+            )
+        if "total_roast_seconds" not in existing_columns:
+            connection.execute(
+                "ALTER TABLE roast_sessions ADD COLUMN total_roast_seconds INTEGER"
+            )
         connection.commit()
 
 
@@ -59,6 +69,8 @@ def save_roast_session(payload):
         payload["bean_name"].strip(),
         payload["origin"].strip(),
         payload["roast_level"].strip(),
+        payload.get("weight_grams"),
+        payload.get("total_roast_seconds"),
         payload.get("notes", "").strip(),
         payload.get("taste_notes", "").strip(),
         payload.get("rating"),
@@ -78,6 +90,8 @@ def save_roast_session(payload):
                 bean_name,
                 origin,
                 roast_level,
+                weight_grams,
+                total_roast_seconds,
                 notes,
                 taste_notes,
                 rating,
@@ -88,7 +102,7 @@ def save_roast_session(payload):
                 curve_json,
                 events_json,
                 photo_data
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             row,
         )
@@ -107,6 +121,8 @@ def list_roast_sessions(limit=8):
                 bean_name,
                 origin,
                 roast_level,
+                weight_grams,
+                total_roast_seconds,
                 notes,
                 taste_notes,
                 rating,
@@ -139,6 +155,8 @@ def get_roast_session(roast_id):
                 bean_name,
                 origin,
                 roast_level,
+                weight_grams,
+                total_roast_seconds,
                 notes,
                 taste_notes,
                 rating,
@@ -191,18 +209,33 @@ def get_roast_summary():
     return summary
 
 
-def update_roast_feedback(roast_id, payload):
-    rating = payload.get("rating")
-    taste_notes = str(payload.get("taste_notes", "")).strip()
+def update_roast_session(roast_id, payload):
+    row = (
+        payload["bean_name"].strip(),
+        payload["origin"].strip(),
+        payload["roast_level"].strip(),
+        payload.get("weight_grams"),
+        payload.get("notes", "").strip(),
+        payload.get("rating"),
+        payload.get("taste_notes", "").strip(),
+        roast_id,
+    )
 
     with sqlite3.connect(_database_path()) as connection:
         cursor = connection.execute(
             """
             UPDATE roast_sessions
-            SET rating = ?, taste_notes = ?
+            SET
+                bean_name = ?,
+                origin = ?,
+                roast_level = ?,
+                weight_grams = ?,
+                notes = ?,
+                rating = ?,
+                taste_notes = ?
             WHERE id = ?
             """,
-            (rating, taste_notes, roast_id),
+            row,
         )
         connection.commit()
 
@@ -210,6 +243,17 @@ def update_roast_feedback(roast_id, payload):
         return None
 
     return get_roast_session(roast_id)
+
+
+def delete_roast_session(roast_id):
+    with sqlite3.connect(_database_path()) as connection:
+        cursor = connection.execute(
+            "DELETE FROM roast_sessions WHERE id = ?",
+            (roast_id,),
+        )
+        connection.commit()
+
+    return cursor.rowcount > 0
 
 
 def _database_path(app=None):

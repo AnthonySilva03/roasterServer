@@ -14,6 +14,7 @@ const detailCopyEl = document.getElementById("detailCopy");
 const detailOriginEl = document.getElementById("detailOrigin");
 const detailLevelEl = document.getElementById("detailLevel");
 const detailSamplesEl = document.getElementById("detailSamples");
+const detailWeightEl = document.getElementById("detailWeight");
 const detailDurationEl = document.getElementById("detailDuration");
 const detailDevelopmentEl = document.getElementById("detailDevelopment");
 const detailDevelopmentRatioEl = document.getElementById("detailDevelopmentRatio");
@@ -25,7 +26,8 @@ const detailNotesEl = document.getElementById("detailNotes");
 const detailEventsEl = document.getElementById("detailEvents");
 const detailPhotoWrapEl = document.getElementById("detailPhotoWrap");
 const detailPhotoEl = document.getElementById("detailPhoto");
-const editTasteFeedbackLinkEl = document.getElementById("editTasteFeedbackLink");
+const editRoastLinkEl = document.getElementById("editRoastLink");
+const removeRoastButtonEl = document.getElementById("removeRoastButton");
 
 const lookupTemperatureChart = createLineChart(
     "lookupTemperatureChart",
@@ -221,11 +223,18 @@ function setLookupDetail(roast) {
     });
 
     detailTitleEl.textContent = `${roast.bean_name} (#${roast.id})`;
-    detailCopyEl.textContent = `Captured ${formatLookupDate(roast.started_at)} through ${formatLookupDate(roast.ended_at)}.`;
+    detailCopyEl.textContent = `Captured ${formatLookupDate(roast.started_at)} through ${formatLookupDate(roast.ended_at)}.${roast.total_roast_seconds !== null && roast.total_roast_seconds !== undefined ? ` Total roast time ${formatDuration(roast.total_roast_seconds)}.` : ""}`;
     detailOriginEl.textContent = roast.origin || "--";
     detailLevelEl.textContent = roast.roast_level || "--";
     detailSamplesEl.textContent = String(roast.sample_count || 0);
-    detailDurationEl.textContent = formatDuration(analytics.totalDurationSeconds);
+    detailWeightEl.textContent = roast.weight_grams !== null && roast.weight_grams !== undefined
+        ? `${Number(roast.weight_grams).toFixed(1)} g`
+        : "--";
+    detailDurationEl.textContent = formatDuration(
+        roast.total_roast_seconds !== null && roast.total_roast_seconds !== undefined
+            ? Number(roast.total_roast_seconds)
+            : analytics.totalDurationSeconds
+    );
     detailDevelopmentEl.textContent = formatDuration(analytics.developmentSeconds);
     detailDevelopmentRatioEl.textContent = analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio)
         ? `${analytics.developmentRatio.toFixed(0)}%`
@@ -239,7 +248,10 @@ function setLookupDetail(roast) {
         ? `Development lasted ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`
         : "First crack was not marked for this roast, so development metrics are incomplete.";
     detailNotesEl.textContent = roast.notes || "No notes recorded.";
-    editTasteFeedbackLinkEl.href = `/lookup/${roast.id}/edit`;
+    editRoastLinkEl.href = `/lookup/${roast.id}/edit`;
+    removeRoastButtonEl.disabled = false;
+    removeRoastButtonEl.dataset.roastId = String(roast.id);
+    removeRoastButtonEl.dataset.roastName = roast.bean_name || `Roast #${roast.id}`;
     renderLookupEvents(roast.events || []);
 
     fillLookupChart(
@@ -260,11 +272,13 @@ function setLookupDetail(roast) {
 }
 
 function clearLookupDetail(copy) {
+    selectedRoastId = null;
     detailTitleEl.textContent = "No roast session matches";
     detailCopyEl.textContent = copy;
     detailOriginEl.textContent = "--";
     detailLevelEl.textContent = "--";
     detailSamplesEl.textContent = "--";
+    detailWeightEl.textContent = "--";
     detailDurationEl.textContent = "--";
     detailDevelopmentEl.textContent = "--";
     detailDevelopmentRatioEl.textContent = "--";
@@ -273,7 +287,10 @@ function clearLookupDetail(copy) {
     detailTasteNotesEl.textContent = "Taste notes can be added from the post-roast edit page.";
     detailAnalyticsCopyEl.textContent = "Select a saved roast to restore analytics and chart detail.";
     detailNotesEl.textContent = "No roast selected.";
-    editTasteFeedbackLinkEl.href = "/lookup";
+    editRoastLinkEl.href = "/lookup";
+    removeRoastButtonEl.disabled = true;
+    delete removeRoastButtonEl.dataset.roastId;
+    delete removeRoastButtonEl.dataset.roastName;
     detailEventsEl.innerHTML = '<div class="empty-state">No event markers saved.</div>';
     detailPhotoEl.removeAttribute("src");
     detailPhotoWrapEl.style.display = "none";
@@ -330,6 +347,42 @@ async function loadLookupPage() {
     }
 }
 
+async function deleteSelectedRoast() {
+    const roastId = Number(removeRoastButtonEl.dataset.roastId || 0);
+    if (!roastId) {
+        return;
+    }
+
+    const roastName = removeRoastButtonEl.dataset.roastName || `roast #${roastId}`;
+    const confirmed = window.confirm(`Remove ${roastName} from saved roasts? This cannot be undone.`);
+    if (!confirmed) {
+        return;
+    }
+
+    removeRoastButtonEl.disabled = true;
+    detailCopyEl.textContent = `Removing ${roastName}...`;
+
+    const response = await fetch(`/api/roasts/${roastId}`, {
+        method: "DELETE",
+    });
+
+    if (!response.ok) {
+        removeRoastButtonEl.disabled = false;
+        detailCopyEl.textContent = `Unable to remove ${roastName} right now.`;
+        return;
+    }
+
+    lookupItems = lookupItems.filter((item) => item.id !== roastId);
+    selectedRoastId = null;
+    renderLookupView();
+
+    const summaryResponse = await fetch("/api/roasts/summary");
+    if (summaryResponse.ok) {
+        const summaryPayload = await summaryResponse.json();
+        setLookupSummary(summaryPayload);
+    }
+}
+
 refreshLookupButtonEl.addEventListener("click", () => {
     loadLookupPage().catch(() => {
         detailCopyEl.textContent = "Unable to refresh roast lookup data right now.";
@@ -344,6 +397,15 @@ clearOriginFilterButtonEl.addEventListener("click", () => {
     selectedOriginKey = null;
     renderLookupView();
 });
+
+removeRoastButtonEl.addEventListener("click", () => {
+    deleteSelectedRoast().catch(() => {
+        removeRoastButtonEl.disabled = false;
+        detailCopyEl.textContent = "Unable to remove the saved roast right now.";
+    });
+});
+
+removeRoastButtonEl.disabled = true;
 
 loadLookupPage().catch(() => {
     detailCopyEl.textContent = "Unable to load roast lookup data right now.";
