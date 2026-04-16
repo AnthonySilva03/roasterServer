@@ -313,6 +313,18 @@ def create_roast():
         except (TypeError, ValueError):
             return jsonify({"error": "Total roast time must be a whole number of seconds."}), 400
 
+    flame_level = payload.get("flame_level")
+    if flame_level in ("", None):
+        payload["flame_level"] = None
+    else:
+        try:
+            payload["flame_level"] = int(flame_level)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Flame level must be a whole number from 0 to 100."}), 400
+
+        if payload["flame_level"] < 0 or payload["flame_level"] > 100:
+            return jsonify({"error": "Flame level must be between 0 and 100."}), 400
+
     payload["created_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
     roast = save_roast_session(payload)
     current_app.logger.info(
@@ -322,6 +334,7 @@ def create_roast():
             "bean_name": roast["bean_name"],
             "origin": roast["origin"],
             "weight_grams": roast["weight_grams"],
+            "flame_level": roast["flame_level"],
             "total_roast_seconds": roast["total_roast_seconds"],
             "sample_count": roast["sample_count"],
         },
@@ -346,7 +359,7 @@ def get_sensor_health():
                 "servo_ok": False,
                 "source": "unavailable",
                 "last_temperature_error": "sensor service not initialized",
-                "speed": 0,
+                "flame_level": 0,
             }
         ), 503
 
@@ -355,7 +368,7 @@ def get_sensor_health():
     if status_code == 200:
         current_app.logger.info(
             "Sensor health check passed",
-            extra={"source": health["source"], "speed": health["speed"]},
+            extra={"source": health["source"], "flame_level": health["flame_level"]},
         )
     else:
         current_app.logger.warning(
@@ -363,7 +376,7 @@ def get_sensor_health():
             extra={
                 "source": health["source"],
                 "last_temperature_error": health["last_temperature_error"],
-                "speed": health["speed"],
+                "flame_level": health["flame_level"],
             },
         )
     return jsonify(health), status_code

@@ -22,7 +22,7 @@ const originSelectionLabelEl = document.getElementById("originSelectionLabel");
 const originSelectionListEl = document.getElementById("originSelectionList");
 const temperatureHealthEl = document.getElementById("temperatureHealth");
 const servoHealthEl = document.getElementById("servoHealth");
-const hardwareSpeedEl = document.getElementById("hardwareSpeed");
+const hardwareFlameLevelEl = document.getElementById("hardwareFlameLevel");
 const hardwareModeEl = document.getElementById("hardwareMode");
 const hardwareErrorEl = document.getElementById("hardwareError");
 const hardwareHealthSummaryEl = document.getElementById("hardwareHealthSummary");
@@ -268,7 +268,7 @@ async function loadHardwareHealth() {
 
     setHealthChip(temperatureHealthEl, health.temperature_ok, "Online", "Offline");
     setHealthChip(servoHealthEl, health.servo_ok, "Online", "Offline");
-    hardwareSpeedEl.textContent = `${health.speed ?? 0}%`;
+    hardwareFlameLevelEl.textContent = `${health.flame_level ?? 0}%`;
     hardwareModeEl.textContent = health.mode || "Unknown";
     hardwareErrorEl.textContent = health.last_temperature_error || "No hardware errors reported.";
 
@@ -302,8 +302,8 @@ dashboardSocket.on("disconnect", () => {
 dashboardSocket.on("sensor_state", (state) => {
     dashboardStatusEl.textContent = state.active ? "Streaming" : "Paused";
     dashboardSourceEl.textContent = state.source || "Unknown";
-    if (state.speed !== undefined) {
-        hardwareSpeedEl.textContent = `${state.speed}%`;
+    if (state.flame_level !== undefined) {
+        hardwareFlameLevelEl.textContent = `${state.flame_level}%`;
     }
 });
 

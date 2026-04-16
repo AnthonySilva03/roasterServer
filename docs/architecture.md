@@ -6,7 +6,7 @@ The application is a small Flask service with two main execution paths:
 
 - HTTP requests render the dashboard and expose the roast-session API.
 - Socket.IO pushes live sensor updates to connected browsers.
-- A shared hardware service handles thermocouple reads, servo speed control, and health checks.
+- A shared hardware service handles thermocouple reads, servo flame control, and health checks.
 
 ## System Diagram
 
@@ -58,11 +58,11 @@ Owns browser-facing routes and JSON API endpoints, including the sensor health e
 
 ### `app/sockets.py`
 
-Owns Socket.IO events, client connection behavior, background sensor broadcasting, and control commands such as `start`, `stop`, `reset`, and `set_speed`.
+Owns Socket.IO events, client connection behavior, background sensor broadcasting, and control commands such as `start`, `stop`, `reset`, and `set_flame_level`.
 
 ### `app/services/sensor_service.py`
 
-Provides a single `SensorService` abstraction that either reads real hardware data through `pigpio` or produces simulated roast telemetry for development. In hardware mode it also controls the roast-speed servo and reports sensor health.
+Provides a single `SensorService` abstraction that either reads real hardware data through `pigpio` or produces simulated roast telemetry for development. In hardware mode it also controls the roast-flame servo and reports sensor health.
 
 ### `app/services/roast_storage.py`
 
@@ -78,7 +78,7 @@ Roast Setup
    v
 Active Roast Session
    |  Socket.IO sensor_data
-   |  Socket.IO set_speed
+   |  Socket.IO set_flame_level
    v
 Roast Review
    |  POST /api/roasts
@@ -104,7 +104,7 @@ dashboard / roast widget
 3. `register_socket_handlers()` starts a background sensor loop.
 4. The sensor loop emits `sensor_data` to all connected clients.
 5. The browser updates charts, metrics, and hardware-health status from those events and the health endpoint.
-6. During roasting, the browser can send `set_speed` control events over Socket.IO to update the servo controller.
+6. During roasting, the browser can send `set_flame_level` control events over Socket.IO to update the flame controller.
 7. When a user saves a roast, the browser posts the current captured curve to `POST /api/roasts`.
 8. SQLite stores the roast session in `instance/roasts.db`.
 
@@ -134,7 +134,7 @@ app/web/routes.py
 app/sockets.py
   -> live stream
   -> roast controls
-  -> speed updates
+  -> flame_level updates
 
 app/services/sensor_service.py
   -> MAX6675 reading

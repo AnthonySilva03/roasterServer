@@ -5,6 +5,7 @@ const reviewOriginEl = document.getElementById("reviewOrigin");
 const reviewRoastLevelEl = document.getElementById("reviewRoastLevel");
 const reviewSampleCountEl = document.getElementById("reviewSampleCount");
 const reviewWeightGramsEl = document.getElementById("reviewWeightGrams");
+const reviewFlameLevelEl = document.getElementById("reviewFlameLevel");
 const reviewEventsEl = document.getElementById("reviewEvents");
 const reviewDurationEl = document.getElementById("reviewDuration");
 const reviewDevelopmentEl = document.getElementById("reviewDevelopment");
@@ -46,6 +47,9 @@ function renderPendingRoast() {
     reviewSampleCountEl.textContent = String((pendingRoast.curve || []).length);
     reviewWeightGramsEl.textContent = pendingRoast.weight_grams !== null && pendingRoast.weight_grams !== undefined
         ? `${Number(pendingRoast.weight_grams).toFixed(1)} g`
+        : "--";
+    reviewFlameLevelEl.textContent = pendingRoast.flame_level !== null && pendingRoast.flame_level !== undefined
+        ? `${Number(pendingRoast.flame_level)}%`
         : "--";
     reviewDurationEl.textContent = formatDuration(
         pendingRoast.total_roast_seconds !== null && pendingRoast.total_roast_seconds !== undefined

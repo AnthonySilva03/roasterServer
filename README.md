@@ -6,7 +6,7 @@ Roaster Server is a Flask and Socket.IO dashboard for tracking live roast teleme
 
 - Streams temperature updates to a browser dashboard in real time.
 - Falls back to simulated sensor data when Raspberry Pi hardware is unavailable.
-- Drives a Raspberry Pi servo speed controller during roasting when `pigpio` hardware mode is enabled.
+- Drives a Raspberry Pi servo flame controller during roasting when `pigpio` hardware mode is enabled.
 - Shows live hardware health on the dashboard using the sensor health API.
 - Plots saved roast origins on interactive global maps using region and country matching from saved origin names.
 - Saves roast session metadata, event markers, optional photo data, and the current chart curve to `instance/roasts.db`.
@@ -146,8 +146,21 @@ Or, if you prefer a script:
 ```bash
 ./scripts/dev.sh install-dev
 ./scripts/dev.sh run
+./scripts/dev.sh seed-roasts
 ./scripts/dev.sh test-fast
 ./scripts/dev.sh check
+```
+
+To replace any saved roast history with fresh demo roasts for UI testing:
+
+```bash
+./venv/bin/python scripts/seed_test_roasts.py
+```
+
+Or through the helper:
+
+```bash
+./scripts/dev.sh seed-roasts
 ```
 
 ## Testing
@@ -203,7 +216,7 @@ python3 run.py
 
 ### Raspberry Pi Temperature Reader And Servo Control
 
-The app can read temperature from a Raspberry Pi through `pigpio` using a MAX6675 thermocouple interface, and it can drive a servo that acts as the roast speed controller.
+The app can read temperature from a Raspberry Pi through `pigpio` using a MAX6675 thermocouple interface, and it can drive a servo that acts as the roast flame controller.
 
 ```text
 MAX6675 breakout              Raspberry Pi
@@ -308,7 +321,7 @@ Expected shape:
   "connected": true,
   "temperature_ok": true,
   "servo_ok": true,
-  "speed": 50,
+  "flame_level": 50,
   "source": "pigpio-max6675"
 }
 ```

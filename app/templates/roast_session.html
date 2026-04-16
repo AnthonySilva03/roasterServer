@@ -39,12 +39,12 @@ data-weight-grams="{{ weight_grams }}"
 
         <aside class="panel panel-pad detail-stack">
             <div>
-                <h2 class="section-title">Speed Controller</h2>
+                <h2 class="section-title">Flame Controller</h2>
                 <label>
-                    Drum Speed
-                    <input id="speedControl" type="range" min="0" max="100" step="5" value="50">
+                    Flame Level
+                    <input id="flameControl" type="range" min="0" max="100" step="5" value="50">
                 </label>
-                <div class="helper-text">Current setting: <span id="speedValue">50%</span></div>
+                <div class="helper-text">Current flame: <span id="flameValue">50%</span></div>
             </div>
 
             <div>
@@ -121,8 +121,8 @@ data-weight-grams="{{ weight_grams }}"
                     <div id="roastServoHealth" class="health-value">Checking...</div>
                 </div>
                 <div class="summary-block">
-                    <div class="metric-label">Controller Speed</div>
-                    <div id="roastHardwareSpeed" class="health-value">--%</div>
+                    <div class="metric-label">Flame Setting</div>
+                    <div id="roastHardwareFlameLevel" class="health-value">--%</div>
                 </div>
             </div>
         </article>

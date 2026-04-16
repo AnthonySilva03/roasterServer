@@ -47,7 +47,7 @@ def test_simulated_sensor_sample_shape():
         "timestamp",
         "temperature",
         "source",
-        "speed",
+        "flame_level",
     }
     assert 188.0 <= sample["temperature"] <= 225.0
 
@@ -90,14 +90,14 @@ def test_pigpio_falls_back_when_unavailable(monkeypatch):
     assert sensor.read_sample()["source"] == "simulated"
 
 
-def test_servo_speed_controller_updates_pulsewidth(monkeypatch):
+def test_servo_flame_controller_updates_pulsewidth(monkeypatch):
     fake_pi = FakePi(bits=bits_for_word(0x0C80))
     monkeypatch.setattr(sensor_module, "pigpio", FakePigpioModule(fake_pi))
 
     sensor = SensorService(sensor_mode="pigpio")
-    result = sensor.set_speed(75)
+    result = sensor.set_flame_level(75)
 
-    assert result["speed"] == 75
+    assert result["flame_level"] == 75
     assert fake_pi.servo_pulsewidths[-1] == (sensor.servo_pin, 1750)
 
 

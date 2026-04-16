@@ -39,7 +39,7 @@ Roast setup
 Active roast session
   -> live temperature graph
   -> pre-roast / start / first crack / second crack / finish
-  -> servo speed control
+  -> servo flame control
   -> hardware widget with issue logging
 
 Roast review
@@ -71,7 +71,7 @@ Post-roast edit
 - `SensorService` is the single hardware abstraction layer.
 - `pigpio` hardware mode supports:
   - MAX6675 temperature reads
-  - servo pulse control for roast speed
+  - servo pulse control for roast flame
   - hardware health reporting
 - Simulated mode is still first-class and should keep working for development without Raspberry Pi hardware.
 - Roast sessions are not written to the database immediately on `Finish`.
@@ -109,14 +109,14 @@ Post-roast edit
 - `app/sockets.py`
   - background sensor loop
   - Socket.IO control handling
-  - speed-control events
+  - flame-control events
 
 ### Services
 
 - `app/services/sensor_service.py`
   - simulated mode
   - MAX6675 pigpio mode
-  - servo speed control
+  - servo flame control
   - health checks
 
 - `app/services/roast_storage.py`
@@ -163,7 +163,7 @@ Post-roast edit
 - `app/static/js/roast_session.js`
   - most active frontend logic right now
   - roast stage markers
-  - speed control messages
+  - flame control messages
   - hardware polling and issue recording
 
 - `app/static/js/roast_review.js`
@@ -206,11 +206,11 @@ If this schema changes later, remember that `init_db()` currently handles additi
 SENSOR_MODE=simulated
   -> simulated temperature
   -> simulated health returns healthy
-  -> speed still tracked logically
+  -> flame level still tracked logically
 
 SENSOR_MODE=pigpio
   -> MAX6675 read via pigpio bit-banging
-  -> servo pulsewidth updates from speed slider
+  -> servo pulsewidth updates from flame slider
   -> /api/sensor/health checks temperature + servo path
 ```
 

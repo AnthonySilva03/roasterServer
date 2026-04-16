@@ -10,8 +10,8 @@ const sensorStatusEl = document.getElementById("sensorStatus");
 const sensorSourceEl = document.getElementById("sensorSource");
 const lastUpdatedEl = document.getElementById("lastUpdated");
 const temperatureValueEl = document.getElementById("temperatureValue");
-const speedControlEl = document.getElementById("speedControl");
-const speedValueEl = document.getElementById("speedValue");
+const flameControlEl = document.getElementById("flameControl");
+const flameValueEl = document.getElementById("flameValue");
 const preRoastButtonEl = document.getElementById("preRoastButton");
 const startRoastButtonEl = document.getElementById("startRoastButton");
 const firstCrackButtonEl = document.getElementById("firstCrackButton");
@@ -22,7 +22,7 @@ const roastHealthSummaryEl = document.getElementById("roastHealthSummary");
 const roastHardwarePanelEl = document.getElementById("roastHardwarePanel");
 const roastTemperatureHealthEl = document.getElementById("roastTemperatureHealth");
 const roastServoHealthEl = document.getElementById("roastServoHealth");
-const roastHardwareSpeedEl = document.getElementById("roastHardwareSpeed");
+const roastHardwareFlameLevelEl = document.getElementById("roastHardwareFlameLevel");
 const roastHardwareModeEl = document.getElementById("roastHardwareMode");
 const roastHardwareErrorEl = document.getElementById("roastHardwareError");
 const roastLatestIssueEl = document.getElementById("roastLatestIssue");
@@ -44,6 +44,7 @@ let latestSensorData = null;
 let explicitPreRoast = false;
 let lastHardwareIssueKey = null;
 let hardwareHealthPollId = null;
+let lastLoggedFlameLevel = Number(flameControlEl.value);
 
 function formatNow() {
     return new Date().toLocaleTimeString([], {
@@ -61,6 +62,10 @@ function setHealthChip(element, ok, okText, failText) {
 
 function currentTimestamp() {
     return new Date().toISOString();
+}
+
+function currentFlameLevel() {
+    return Number(flameControlEl.value);
 }
 
 function renderEvents() {
@@ -138,7 +143,7 @@ function addEvent(label, detail, options = {}) {
         chartLabel: options.chartLabel || null,
         color: options.color || "#7f3417",
         temperature: latestSensorData ? Number(latestSensorData.temperature) : null,
-        speed: Number(speedControlEl.value),
+        flame_level: options.flameLevel ?? currentFlameLevel(),
     };
     roastEvents.push(event);
     renderEvents();
@@ -179,7 +184,7 @@ function captureTemperature(data) {
     roastCurve.push({
         timestamp: data.timestamp,
         temperature: Number(data.temperature),
-        speed: Number(speedControlEl.value),
+        flame_level: currentFlameLevel(),
     });
 
     if (roastCurve.length > roastSessionMaxPoints) {
@@ -228,6 +233,7 @@ function buildPendingRoastPayload() {
         origin,
         roast_level: roastLevel,
         weight_grams: roastWeightGrams ? Number(roastWeightGrams) : null,
+        flame_level: currentFlameLevel(),
         total_roast_seconds: analytics.totalDurationSeconds !== null
             ? Math.round(analytics.totalDurationSeconds)
             : null,
@@ -237,7 +243,7 @@ function buildPendingRoastPayload() {
         notes: [
             `Pre-roast used: ${explicitPreRoast ? "yes" : "no"}`,
             `Batch weight: ${roastWeightGrams ? `${roastWeightGrams} g` : "--"}`,
-            `Final speed setting: ${speedControlEl.value}%`,
+            `Final flame setting: ${flameControlEl.value}%`,
             analyticsNotes,
             stageNotes,
         ].filter(Boolean).join("\n"),
@@ -249,7 +255,7 @@ function buildPendingRoastPayload() {
             chart_label: event.chartLabel,
             color: event.color,
             temperature: event.temperature,
-            speed: event.speed,
+            flame_level: event.flame_level,
         })),
         photo_data: "",
     };
@@ -266,7 +272,7 @@ async function loadRoastHardwareHealth() {
 
     setHealthChip(roastTemperatureHealthEl, health.temperature_ok, "Online", "Offline");
     setHealthChip(roastServoHealthEl, health.servo_ok, "Online", "Offline");
-    roastHardwareSpeedEl.textContent = `${health.speed ?? 0}%`;
+    roastHardwareFlameLevelEl.textContent = `${health.flame_level ?? 0}%`;
     roastHardwareModeEl.textContent = health.mode || "Unknown";
     roastHardwareErrorEl.textContent = health.last_temperature_error || "No hardware errors reported.";
     roastHealthSummaryEl.textContent = response.ok
@@ -301,10 +307,11 @@ roastSessionSocket.on("disconnect", () => {
 roastSessionSocket.on("sensor_state", (state) => {
     sensorStatusEl.textContent = state.active ? "Streaming" : "Paused";
     sensorSourceEl.textContent = state.source || "Unknown";
-    if (state.speed !== undefined) {
-        speedControlEl.value = String(state.speed);
-        speedValueEl.textContent = `${state.speed}%`;
-        roastHardwareSpeedEl.textContent = `${state.speed}%`;
+    if (state.flame_level !== undefined) {
+        flameControlEl.value = String(state.flame_level);
+        flameValueEl.textContent = `${state.flame_level}%`;
+        roastHardwareFlameLevelEl.textContent = `${state.flame_level}%`;
+        lastLoggedFlameLevel = Number(state.flame_level);
     }
 });
 
@@ -319,12 +326,22 @@ roastSessionSocket.on("control_response", (data) => {
     sessionMessageEl.textContent = data.message;
 });
 
-speedControlEl.addEventListener("input", () => {
-    speedValueEl.textContent = `${speedControlEl.value}%`;
+flameControlEl.addEventListener("input", () => {
+    const nextFlameLevel = currentFlameLevel();
+    flameValueEl.textContent = `${nextFlameLevel}%`;
     roastSessionSocket.emit("control", {
-        command: "set_speed",
-        speed: Number(speedControlEl.value),
+        command: "set_flame_level",
+        flame_level: nextFlameLevel,
     });
+
+    if (roastRecording && nextFlameLevel !== lastLoggedFlameLevel) {
+        addEvent("Flame Change", `Flame adjusted from ${lastLoggedFlameLevel}% to ${nextFlameLevel}%.`, {
+            color: "#ff8f47",
+            flameLevel: nextFlameLevel,
+        });
+    }
+
+    lastLoggedFlameLevel = nextFlameLevel;
 });
 
 preRoastButtonEl.addEventListener("click", () => {
@@ -335,13 +352,15 @@ preRoastButtonEl.addEventListener("click", () => {
     roastEvents.length = 0;
     clearRoastGraph();
     beginRecording(true);
-    addEvent("Pre Roast", `Recording started at ${temperatureValueEl.textContent} with speed ${speedControlEl.value}%.`, {
+    lastLoggedFlameLevel = currentFlameLevel();
+    addEvent("Pre Roast", `Recording started at ${temperatureValueEl.textContent} with flame ${flameControlEl.value}%.`, {
         time: preRoastAt,
         showMarker: true,
         chartLabel: latestSensorData?.timestamp || "Pre Roast",
         color: "#566a8e",
+        flameLevel: currentFlameLevel(),
     });
-    sessionMessageEl.textContent = "Pre-roast started. Recording time, temperature, and speed every sensor update.";
+    sessionMessageEl.textContent = "Pre-roast started. Recording time, temperature, and flame setting every sensor update.";
 });
 
 startRoastButtonEl.addEventListener("click", () => {
@@ -351,11 +370,13 @@ startRoastButtonEl.addEventListener("click", () => {
         beginRecording(false);
     }
     roastStartedAt = currentTimestamp();
-    addEvent("Start", `Roast start marked at ${temperatureValueEl.textContent} with speed ${speedControlEl.value}%.`, {
+    lastLoggedFlameLevel = currentFlameLevel();
+    addEvent("Start", `Roast start marked at ${temperatureValueEl.textContent} with flame ${flameControlEl.value}%.`, {
         time: roastStartedAt,
         showMarker: true,
         chartLabel: latestSensorData?.timestamp || "Start",
         color: "#b4542b",
+        flameLevel: currentFlameLevel(),
     });
     sessionMessageEl.textContent = "Start marker recorded on the graph.";
 });
@@ -365,6 +386,7 @@ firstCrackButtonEl.addEventListener("click", () => {
         showMarker: true,
         chartLabel: latestSensorData?.timestamp || "First Crack",
         color: "#d4a246",
+        flameLevel: currentFlameLevel(),
     });
     sessionMessageEl.textContent = "First crack marker recorded.";
 });
@@ -374,6 +396,7 @@ secondCrackButtonEl.addEventListener("click", () => {
         showMarker: true,
         chartLabel: latestSensorData?.timestamp || "Second Crack",
         color: "#2a7f86",
+        flameLevel: currentFlameLevel(),
     });
     sessionMessageEl.textContent = "Second crack marker recorded.";
 });
@@ -395,6 +418,7 @@ finishRoastButtonEl.addEventListener("click", () => {
         showMarker: true,
         chartLabel: latestSensorData?.timestamp || "Finish",
         color: "#7f3417",
+        flameLevel: currentFlameLevel(),
     });
     sessionMessageEl.textContent = "Opening roast review...";
     goToReview();

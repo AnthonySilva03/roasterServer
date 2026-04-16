@@ -38,7 +38,7 @@ class SensorService:
         self.servo_pin = servo_control_pin
         self.servo_min_pulsewidth = servo_min_pulsewidth
         self.servo_max_pulsewidth = servo_max_pulsewidth
-        self._current_speed = 50
+        self._current_flame_level = 50
         self._pi = self._connect_pigpio()
         self._last_temperature_error = None
         self._sim_temperature = 202.0
@@ -57,7 +57,7 @@ class SensorService:
 
     def reset(self) -> None:
         self._sim_temperature = 202.0
-        self.set_speed(50)
+        self.set_flame_level(50)
 
     def read_sample(self) -> dict:
         temperature = self._read_temperature()
@@ -72,19 +72,19 @@ class SensorService:
             "timestamp": time.strftime("%H:%M:%S"),
             "temperature": round(temperature, 2),
             "source": self.source_name,
-            "speed": self._current_speed,
+            "flame_level": self._current_flame_level,
         }
 
-    def set_speed(self, speed: int | float) -> dict:
-        bounded_speed = max(0, min(100, int(round(float(speed)))))
-        self._current_speed = bounded_speed
+    def set_flame_level(self, flame_level: int | float) -> dict:
+        bounded_flame_level = max(0, min(100, int(round(float(flame_level)))))
+        self._current_flame_level = bounded_flame_level
 
         if self._pi:
-            pulsewidth = self._speed_to_pulsewidth(bounded_speed)
+            pulsewidth = self._flame_level_to_pulsewidth(bounded_flame_level)
             self._pi.set_servo_pulsewidth(self.servo_pin, pulsewidth)
 
         return {
-            "speed": self._current_speed,
+            "flame_level": self._current_flame_level,
             "source": self.source_name,
         }
 
@@ -96,7 +96,7 @@ class SensorService:
             "servo_ok": False,
             "source": self.source_name,
             "last_temperature_error": self._last_temperature_error,
-            "speed": self._current_speed,
+            "flame_level": self._current_flame_level,
         }
 
         if self.sensor_mode != "pigpio":
@@ -133,7 +133,7 @@ class SensorService:
         pi.set_mode(self.servo_pin, pigpio.OUTPUT)
         pi.write(self.cs_pin, 1)
         pi.write(self.clk_pin, 0)
-        pi.set_servo_pulsewidth(self.servo_pin, self._speed_to_pulsewidth(self._current_speed))
+        pi.set_servo_pulsewidth(self.servo_pin, self._flame_level_to_pulsewidth(self._current_flame_level))
         return pi
 
     def _read_temperature(self):
@@ -168,6 +168,6 @@ class SensorService:
         setattr(self, attr_name, bounded)
         return bounded
 
-    def _speed_to_pulsewidth(self, speed: int) -> int:
+    def _flame_level_to_pulsewidth(self, flame_level: int) -> int:
         span = self.servo_max_pulsewidth - self.servo_min_pulsewidth
-        return int(self.servo_min_pulsewidth + (span * (speed / 100)))
+        return int(self.servo_min_pulsewidth + (span * (flame_level / 100)))

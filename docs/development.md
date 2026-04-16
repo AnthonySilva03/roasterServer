@@ -47,6 +47,7 @@ Or with the helper script:
 ```bash
 ./scripts/dev.sh install-dev
 ./scripts/dev.sh run
+./scripts/dev.sh seed-roasts
 ./scripts/dev.sh test-fast
 ./scripts/dev.sh check
 ```
@@ -64,6 +65,7 @@ Or with the helper script:
 - The lookup edit page now updates saved roast metadata, roast notes, rating, and tasting notes through `PATCH /api/roasts/<id>`.
 - Saved roasts can be removed from the lookup page through `DELETE /api/roasts/<id>`.
 - Console logging now covers startup, route hits, roast saves, feedback edits, socket controls, and periodic sensor samples for testing.
+- You can reset the local database to a known demo roast set with `./scripts/dev.sh seed-roasts`.
 
 ## Useful Environment Variables
 
@@ -75,7 +77,7 @@ Or with the helper script:
 - `MAX6675_CS_PIN`: chip-select GPIO for the MAX6675 reader.
 - `MAX6675_CLK_PIN`: clock GPIO for the MAX6675 reader.
 - `MAX6675_DO_PIN`: data-out GPIO for the MAX6675 reader.
-- `SERVO_CONTROL_PIN`: GPIO pin used for the roast speed servo.
+- `SERVO_CONTROL_PIN`: GPIO pin used for the roast flame servo.
 - `SERVO_MIN_PULSEWIDTH`: minimum pulse width for the servo controller.
 - `SERVO_MAX_PULSEWIDTH`: maximum pulse width for the servo controller.
 
@@ -84,7 +86,7 @@ Or with the helper script:
 - Install and start the `pigpio` daemon with `sudo pigpiod`.
 - Set `SENSOR_MODE=pigpio` before starting the Flask app.
 - The current hardware reader expects a MAX6675 thermocouple breakout.
-- The roast speed slider can drive a servo through `SERVO_CONTROL_PIN` when hardware mode is enabled.
+- The roast flame slider can drive a servo through `SERVO_CONTROL_PIN` when hardware mode is enabled.
 - If the Pi reader is unavailable, the app falls back to simulated data so the UI still works.
 - For Wi-Fi onboarding, use `./scripts/wifi_provisioning_bootstrap.sh` instead of `python run.py` so the Pi can fall back to a temporary setup hotspot when it is not already on a saved network.
 
@@ -194,7 +196,7 @@ sudo journalctl -u roaster-server.service -f
 ## Hardware Health Check
 
 - The backend exposes `GET /api/sensor/health`.
-- The dashboard polls that endpoint and shows temperature sensor status, servo status, current speed, mode, and the last reported error.
+- The dashboard polls that endpoint and shows temperature sensor status, servo status, current flame level, mode, and the last reported error.
 - A `200` response means the configured mode passed the health check.
 - A `503` response means the Pi hardware path is unavailable or failing.
 

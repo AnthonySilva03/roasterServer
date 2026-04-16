@@ -12,6 +12,7 @@ Commands:
   install       Install app dependencies
   install-dev   Install app and test dependencies
   run           Start the app
+  seed-roasts   Replace saved roasts with demo test roasts
   test          Run the full pytest suite
   test-fast     Run pytest in quiet mode
   compile       Compile-check Python files
@@ -33,6 +34,9 @@ case "$1" in
         ;;
     run)
         "$PYTHON" run.py
+        ;;
+    seed-roasts)
+        PYTHONPATH=. "$PYTHON" scripts/seed_test_roasts.py
         ;;
     test)
         "$PYTHON" -m pytest

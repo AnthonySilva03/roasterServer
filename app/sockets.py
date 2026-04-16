@@ -33,10 +33,10 @@ def register_socket_handlers(app):
             servo_max_pulsewidth=app.config["SERVO_MAX_PULSEWIDTH"],
         )
         logger.info(
-            "Sensor service initialized mode=%s interval=%.2fs speed=%s",
+            "Sensor service initialized mode=%s interval=%.2fs flame_level=%s",
             app.config["SENSOR_MODE"],
             sensor_interval_seconds,
-            sensor_service.health_status()["speed"],
+            sensor_service.health_status()["flame_level"],
         )
 
     if app.config.get("START_SENSOR_BACKGROUND_TASK", True):
@@ -61,11 +61,11 @@ def _sensor_loop():
             sample_counter += 1
             if sample_counter == 1 or sample_counter % sensor_log_every_n == 0:
                 logger.info(
-                    "Sensor sample #%s temperature=%s source=%s speed=%s",
+                    "Sensor sample #%s temperature=%s source=%s flame_level=%s",
                     sample_counter,
                     latest_sample["temperature"],
                     latest_sample["source"],
-                    latest_sample["speed"],
+                    latest_sample["flame_level"],
                 )
             socketio.emit("sensor_data", latest_sample)
 
@@ -84,7 +84,7 @@ def handle_connect():
         {
             "active": sensor_service.active if sensor_service else False,
             "source": sensor_service.source_name if sensor_service else "unknown",
-            "speed": sensor_service.health_status()["speed"] if sensor_service else 0,
+            "flame_level": sensor_service.health_status()["flame_level"] if sensor_service else 0,
         },
     )
     if latest_sample:
@@ -114,10 +114,10 @@ def handle_control(data):
         latest_sample = None
         sample_counter = 0
         message = "Sensor values reset."
-    elif command == "set_speed":
-        speed = (data or {}).get("speed", 50)
-        result = sensor_service.set_speed(speed)
-        message = f"Speed controller set to {result['speed']}%."
+    elif command == "set_flame_level":
+        flame_level = (data or {}).get("flame_level", 50)
+        result = sensor_service.set_flame_level(flame_level)
+        message = f"Flame controller set to {result['flame_level']}%."
     else:
         message = "Unknown command."
         logger.warning("Unknown socket control command=%s", command)
@@ -129,6 +129,6 @@ def handle_control(data):
         {
             "active": sensor_service.active,
             "source": sensor_service.source_name,
-            "speed": sensor_service.health_status()["speed"],
+            "flame_level": sensor_service.health_status()["flame_level"],
         },
     )

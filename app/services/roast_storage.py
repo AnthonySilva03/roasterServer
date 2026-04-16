@@ -18,6 +18,7 @@ def init_db(app):
                 origin TEXT NOT NULL,
                 roast_level TEXT NOT NULL,
                 weight_grams REAL,
+                flame_level INTEGER,
                 total_roast_seconds INTEGER,
                 notes TEXT NOT NULL,
                 taste_notes TEXT NOT NULL DEFAULT '',
@@ -55,6 +56,10 @@ def init_db(app):
             connection.execute(
                 "ALTER TABLE roast_sessions ADD COLUMN weight_grams REAL"
             )
+        if "flame_level" not in existing_columns:
+            connection.execute(
+                "ALTER TABLE roast_sessions ADD COLUMN flame_level INTEGER"
+            )
         if "total_roast_seconds" not in existing_columns:
             connection.execute(
                 "ALTER TABLE roast_sessions ADD COLUMN total_roast_seconds INTEGER"
@@ -63,13 +68,15 @@ def init_db(app):
 
 
 def save_roast_session(payload):
-    curve = payload.get("curve") or []
-    events = payload.get("events") or []
+    flame_level = _normalize_flame_level(payload.get("flame_level"))
+    curve = _normalize_curve(payload.get("curve") or [], flame_level)
+    events = _normalize_events(payload.get("events") or [], flame_level)
     row = (
         payload["bean_name"].strip(),
         payload["origin"].strip(),
         payload["roast_level"].strip(),
         payload.get("weight_grams"),
+        flame_level,
         payload.get("total_roast_seconds"),
         payload.get("notes", "").strip(),
         payload.get("taste_notes", "").strip(),
@@ -91,6 +98,7 @@ def save_roast_session(payload):
                 origin,
                 roast_level,
                 weight_grams,
+                flame_level,
                 total_roast_seconds,
                 notes,
                 taste_notes,
@@ -102,7 +110,7 @@ def save_roast_session(payload):
                 curve_json,
                 events_json,
                 photo_data
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             row,
         )
@@ -122,6 +130,7 @@ def list_roast_sessions(limit=8):
                 origin,
                 roast_level,
                 weight_grams,
+                flame_level,
                 total_roast_seconds,
                 notes,
                 taste_notes,
@@ -156,6 +165,7 @@ def get_roast_session(roast_id):
                 origin,
                 roast_level,
                 weight_grams,
+                flame_level,
                 total_roast_seconds,
                 notes,
                 taste_notes,
@@ -177,8 +187,11 @@ def get_roast_session(roast_id):
         return None
 
     roast = dict(row)
+    roast["flame_level"] = _normalize_flame_level(roast.get("flame_level"))
     roast["curve"] = json.loads(roast.pop("curve_json") or "[]")
     roast["events"] = json.loads(roast.pop("events_json") or "[]")
+    roast["curve"] = _normalize_curve(roast["curve"], roast["flame_level"])
+    roast["events"] = _normalize_events(roast["events"], roast["flame_level"])
     return roast
 
 
@@ -265,3 +278,33 @@ def _database_path(app=None):
         return Path(flask_app.instance_path) / relative
 
     return Path(configured)
+
+
+def _normalize_flame_level(value):
+    if value in ("", None):
+        return None
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_curve(curve, default_flame_level):
+    normalized = []
+    for point in curve:
+        flame_level = _normalize_flame_level(point.get("flame_level", default_flame_level))
+        normalized_point = dict(point)
+        normalized_point["flame_level"] = flame_level
+        normalized.append(normalized_point)
+    return normalized
+
+
+def _normalize_events(events, default_flame_level):
+    normalized = []
+    for event in events:
+        flame_level = _normalize_flame_level(event.get("flame_level", default_flame_level))
+        normalized_event = dict(event)
+        normalized_event["flame_level"] = flame_level
+        normalized.append(normalized_event)
+    return normalized

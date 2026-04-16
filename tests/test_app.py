@@ -41,6 +41,7 @@ def test_create_and_fetch_roast(client):
             "origin": "Costa Rica",
             "roast_level": "Medium",
             "weight_grams": 350.5,
+            "flame_level": 60,
             "total_roast_seconds": 600,
             "started_at": "2026-04-15T12:00:00Z",
             "ended_at": "2026-04-15T12:10:00Z",
@@ -52,14 +53,14 @@ def test_create_and_fetch_roast(client):
                 "chart_label": "12:00:05",
                 "color": "#b4542b",
                 "temperature": 201.2,
-                "speed": 50,
+                "flame_level": 50,
             }],
             "photo_data": "data:image/png;base64,abc123",
             "curve": [
                 {
                     "timestamp": "12:00:05",
                     "temperature": 201.2,
-                    "speed": 50,
+                    "flame_level": 50,
                 }
             ],
         },
@@ -74,10 +75,13 @@ def test_create_and_fetch_roast(client):
     detail = detail_response.get_json()
     assert len(detail["curve"]) == 1
     assert detail["curve"][0]["temperature"] == 201.2
+    assert detail["curve"][0]["flame_level"] == 50
     assert detail["events"][0]["label"] == "Start"
     assert detail["events"][0]["chart_label"] == "12:00:05"
+    assert detail["events"][0]["flame_level"] == 50
     assert detail["photo_data"] == "data:image/png;base64,abc123"
     assert detail["weight_grams"] == 350.5
+    assert detail["flame_level"] == 60
     assert detail["total_roast_seconds"] == 600
     assert detail["rating"] is None
     assert detail["taste_notes"] == ""
@@ -132,6 +136,23 @@ def test_create_roast_rejects_invalid_weight(client):
 
     assert response.status_code == 400
     assert response.get_json()["error"] == "Weight must be a valid number in grams."
+
+
+def test_create_roast_rejects_invalid_flame_level(client):
+    response = client.post(
+        "/api/roasts",
+        json={
+            "bean_name": "Bad Flame",
+            "origin": "Kenya",
+            "roast_level": "Medium",
+            "flame_level": 120,
+            "started_at": "2026-04-15T12:00:00Z",
+            "ended_at": "2026-04-15T12:10:00Z",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Flame level must be between 0 and 100."
 
 
 def test_update_roast_feedback(client):

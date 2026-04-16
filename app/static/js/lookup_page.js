@@ -15,6 +15,7 @@ const detailOriginEl = document.getElementById("detailOrigin");
 const detailLevelEl = document.getElementById("detailLevel");
 const detailSamplesEl = document.getElementById("detailSamples");
 const detailWeightEl = document.getElementById("detailWeight");
+const detailFlameLevelEl = document.getElementById("detailFlameLevel");
 const detailDurationEl = document.getElementById("detailDuration");
 const detailDevelopmentEl = document.getElementById("detailDevelopment");
 const detailDevelopmentRatioEl = document.getElementById("detailDevelopmentRatio");
@@ -198,7 +199,7 @@ function renderLookupEvents(events) {
             <div class="history-meta">
                 ${event.detail || "No details"}<br>
                 ${event.temperature !== null && event.temperature !== undefined ? `Temp ${Number(event.temperature).toFixed(1)} °C` : ""}
-                ${event.speed !== null && event.speed !== undefined ? `<br>Speed ${event.speed}%` : ""}
+                ${event.flame_level !== null && event.flame_level !== undefined ? `<br>Flame ${event.flame_level}%` : ""}
             </div>
         </article>
     `).join("");
@@ -238,6 +239,9 @@ function setLookupDetail(roast) {
     detailSamplesEl.textContent = String(roast.sample_count || 0);
     detailWeightEl.textContent = roast.weight_grams !== null && roast.weight_grams !== undefined
         ? `${Number(roast.weight_grams).toFixed(1)} g`
+        : "--";
+    detailFlameLevelEl.textContent = roast.flame_level !== null && roast.flame_level !== undefined
+        ? `${Number(roast.flame_level)}%`
         : "--";
     detailDurationEl.textContent = formatDuration(
         roast.total_roast_seconds !== null && roast.total_roast_seconds !== undefined
@@ -299,6 +303,7 @@ function clearLookupDetail(copy) {
     detailLevelEl.textContent = "--";
     detailSamplesEl.textContent = "--";
     detailWeightEl.textContent = "--";
+    detailFlameLevelEl.textContent = "--";
     detailDurationEl.textContent = "--";
     detailDevelopmentEl.textContent = "--";
     detailDevelopmentRatioEl.textContent = "--";
