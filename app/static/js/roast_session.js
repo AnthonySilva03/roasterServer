@@ -114,13 +114,17 @@ function renderAnalytics() {
 }
 
 function rebuildStageMarkers() {
+    const baseTime = resolveChartBaseTime(roastCurve, {
+        startedAt: roastStartedAt || preRoastAt,
+    });
     const markers = roastEvents
         .filter((event) => event.showMarker && event.chartLabel)
         .map((event) => ({
-            label: event.chartLabel,
+            label: toElapsedMinutes(event.chartLabel, baseTime, roastStartedAt || preRoastAt),
             text: event.label,
             color: event.color,
-        }));
+        }))
+        .filter((event) => Number.isFinite(event.label));
     setStageMarkers(roastChart, markers);
 }
 
@@ -159,9 +163,7 @@ function recordHardwareIssue(detail, options = {}) {
 
 function clearRoastGraph() {
     roastCurve.length = 0;
-    roastChart.data.labels = [];
-    roastChart.data.datasets[0].data = [];
-    roastChart.update();
+    setChartSeries(roastChart, []);
     rebuildStageMarkers();
     renderAnalytics();
 }
@@ -184,11 +186,11 @@ function captureTemperature(data) {
         roastCurve.shift();
     }
 
-    pushChartPoint(
+    setChartSeries(
         roastChart,
-        data.timestamp,
-        Number(data.temperature),
-        roastSessionMaxPoints
+        buildChartSeries(roastCurve, {
+            startedAt: roastStartedAt || preRoastAt,
+        })
     );
     rebuildStageMarkers();
     renderAnalytics();

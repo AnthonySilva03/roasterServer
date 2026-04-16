@@ -173,9 +173,14 @@ function renderLookupList(items) {
 }
 
 function fillLookupChart(chart, curve, extractor) {
-    chart.data.labels = curve.map((point) => point.timestamp);
-    chart.data.datasets[0].data = curve.map(extractor);
-    chart.update();
+    setChartSeries(
+        chart,
+        curve
+            .map((point) => ({
+                ...point,
+                temperature: extractor(point),
+            }))
+    );
 }
 
 function renderLookupEvents(events) {
@@ -203,7 +208,7 @@ function buildEventBadges(events) {
     return events
         .filter((event) => event.chart_label)
         .map((event) => ({
-            label: event.chart_label,
+            chart_label: event.chart_label,
             text: event.label,
             shortText: event.label
                 .split(" ")
@@ -218,6 +223,10 @@ function buildEventBadges(events) {
 function setLookupDetail(roast) {
     selectedRoastId = roast.id;
     const analytics = buildRoastAnalytics(roast.curve || [], roast.events || [], {
+        startedAt: roast.started_at,
+        endedAt: roast.ended_at,
+    });
+    const chartBaseTime = resolveChartBaseTime(roast.curve || [], {
         startedAt: roast.started_at,
         endedAt: roast.ended_at,
     });
@@ -256,11 +265,22 @@ function setLookupDetail(roast) {
 
     fillLookupChart(
         lookupTemperatureChart,
-        roast.curve || [],
-        (point) => Number(point.temperature)
+        buildChartSeries(roast.curve || [], {
+            startedAt: roast.started_at,
+            endedAt: roast.ended_at,
+        }),
+        (point) => Number(point.y)
     );
     setStageMarkers(lookupTemperatureChart, []);
-    setStageBadges(lookupTemperatureChart, buildEventBadges(roast.events || []));
+    setStageBadges(
+        lookupTemperatureChart,
+        buildEventBadges(roast.events || [])
+            .map((event) => ({
+                ...event,
+                x: toElapsedMinutes(event.chart_label, chartBaseTime, roast.started_at),
+            }))
+            .filter((event) => Number.isFinite(event.x))
+    );
 
     if (roast.photo_data) {
         detailPhotoEl.src = roast.photo_data;
@@ -294,7 +314,7 @@ function clearLookupDetail(copy) {
     detailEventsEl.innerHTML = '<div class="empty-state">No event markers saved.</div>';
     detailPhotoEl.removeAttribute("src");
     detailPhotoWrapEl.style.display = "none";
-    fillLookupChart(lookupTemperatureChart, [], (point) => Number(point.temperature));
+    fillLookupChart(lookupTemperatureChart, [], (point) => Number(point.y));
     setStageMarkers(lookupTemperatureChart, []);
     setStageBadges(lookupTemperatureChart, []);
 }

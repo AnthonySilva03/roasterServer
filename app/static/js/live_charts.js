@@ -35,8 +35,10 @@ const stageMarkerPlugin = {
         });
 
         badges.forEach((badge) => {
-            const pointIndex = chart.data.labels.findIndex((label) => label === badge.label);
-            const point = meta?.data?.[pointIndex];
+            const pointIndex = chart.data.datasets[0]?.data?.findIndex((pointData) => (
+                Number.isFinite(pointData?.x) && Math.abs(pointData.x - badge.x) < 0.001
+            ));
+            const point = pointIndex >= 0 ? meta?.data?.[pointIndex] : null;
             if (!point) {
                 return;
             }
@@ -77,6 +79,7 @@ if (typeof Chart !== "undefined") {
 function createChartDefaults() {
     return {
         responsive: true,
+        maintainAspectRatio: false,
         animation: false,
         plugins: {
             legend: {
@@ -89,8 +92,36 @@ function createChartDefaults() {
         },
         scales: {
             x: {
+                type: "linear",
+                min: 0,
+                max: 30,
+                grid: {
+                    color: "rgba(194, 219, 255, 0.12)",
+                },
                 ticks: {
-                    maxTicksLimit: 6,
+                    stepSize: 5,
+                    color: "rgba(226, 235, 255, 0.72)",
+                    callback(value) {
+                        return `${Number(value)}m`;
+                    },
+                },
+                title: {
+                    display: true,
+                    text: "Roast Time (min)",
+                    color: "rgba(226, 235, 255, 0.72)",
+                },
+            },
+            y: {
+                grid: {
+                    color: "rgba(194, 219, 255, 0.1)",
+                },
+                ticks: {
+                    color: "rgba(226, 235, 255, 0.72)",
+                },
+                title: {
+                    display: true,
+                    text: "Temperature (°C)",
+                    color: "rgba(226, 235, 255, 0.72)",
                 },
             },
         },
@@ -107,7 +138,7 @@ function createLineChart(id, label, color) {
                     label,
                     data: [],
                     borderColor: color,
-                    backgroundColor: `${color}22`,
+                    backgroundColor: `${color}1f`,
                     borderWidth: 3,
                     tension: 0.28,
                     pointRadius: 0,
@@ -119,15 +150,8 @@ function createLineChart(id, label, color) {
     });
 }
 
-function pushChartPoint(chart, label, value, maxPoints) {
-    chart.data.labels.push(label);
-    chart.data.datasets[0].data.push(value);
-
-    if (chart.data.labels.length > maxPoints) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
-    }
-
+function setChartSeries(chart, points) {
+    chart.data.datasets[0].data = points;
     chart.update();
 }
 
@@ -139,6 +163,47 @@ function setStageMarkers(chart, markers) {
 function setStageBadges(chart, badges) {
     chart.options.plugins.stageMarkers.badges = badges;
     chart.update();
+}
+
+function resolveChartBaseTime(curve = [], options = {}) {
+    const anchorDate = options.anchorDate || options.startedAt || options.endedAt || null;
+    const startedAt = parseRoastTimestamp(options.startedAt, anchorDate);
+    if (startedAt) {
+        return startedAt;
+    }
+
+    const firstPoint = curve[0]?.timestamp;
+    return parseRoastTimestamp(firstPoint, anchorDate);
+}
+
+function toElapsedMinutes(value, baseTime, anchorDate = null) {
+    if (!baseTime) {
+        return null;
+    }
+
+    const pointTime = parseRoastTimestamp(value, anchorDate || baseTime);
+    if (!pointTime) {
+        return null;
+    }
+
+    return Math.max(0, (pointTime.getTime() - baseTime.getTime()) / 60000);
+}
+
+function buildChartSeries(curve = [], options = {}) {
+    const anchorDate = options.anchorDate || options.startedAt || options.endedAt || null;
+    const baseTime = resolveChartBaseTime(curve, options);
+
+    return curve
+        .map((point) => {
+            const x = toElapsedMinutes(point.timestamp, baseTime, anchorDate);
+            const y = Number(point.temperature);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                return null;
+            }
+
+            return { x, y };
+        })
+        .filter(Boolean);
 }
 
 function parseRoastTimestamp(value, anchorDate = null) {

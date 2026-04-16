@@ -1,17 +1,19 @@
 :root {
-    color-scheme: light;
-    --bg: #f7f1e8;
-    --panel: rgba(255, 252, 247, 0.92);
-    --panel-strong: rgba(255, 248, 238, 0.98);
-    --ink: #2f241d;
-    --muted: #7f6b5c;
-    --accent: #b4542b;
-    --accent-dark: #7f3417;
-    --teal: #2a7f86;
-    --blue: #566a8e;
-    --gold: #d4a246;
-    --border: rgba(87, 58, 40, 0.12);
-    --shadow: 0 18px 50px rgba(96, 60, 30, 0.12);
+    color-scheme: dark;
+    --bg: #06080f;
+    --bg-soft: #0b1020;
+    --panel: linear-gradient(180deg, rgba(24, 32, 54, 0.84), rgba(10, 14, 28, 0.92));
+    --panel-strong: linear-gradient(180deg, rgba(33, 42, 72, 0.92), rgba(12, 17, 32, 0.98));
+    --ink: #edf3ff;
+    --muted: #97a5c8;
+    --accent: #ff8f47;
+    --accent-dark: #ffc08b;
+    --teal: #5de1ff;
+    --blue: #7ea4ff;
+    --gold: #f1c96b;
+    --border: rgba(171, 193, 255, 0.14);
+    --shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -20,11 +22,13 @@
 
 body {
     margin: 0;
-    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    font-family: "Segoe UI", "Trebuchet MS", sans-serif;
     color: var(--ink);
     background:
-        radial-gradient(circle at top, rgba(222, 180, 140, 0.42), transparent 35%),
-        linear-gradient(180deg, #efe3d2 0%, #f7f1e8 52%, #efe5d8 100%);
+        radial-gradient(circle at top left, rgba(93, 225, 255, 0.16), transparent 26%),
+        radial-gradient(circle at top right, rgba(126, 164, 255, 0.18), transparent 30%),
+        radial-gradient(circle at 50% 120%, rgba(255, 143, 71, 0.12), transparent 36%),
+        linear-gradient(180deg, #09101d 0%, #070b15 45%, #05070d 100%);
     min-height: 100vh;
 }
 
@@ -41,9 +45,9 @@ textarea {
 }
 
 .site-shell {
-    max-width: 1180px;
+    max-width: 1380px;
     margin: 0 auto;
-    padding: 24px 20px 48px;
+    padding: 28px 24px 56px;
 }
 
 .site-header {
@@ -52,6 +56,12 @@ textarea {
     align-items: center;
     gap: 18px;
     margin-bottom: 24px;
+    padding: 18px 22px;
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    background: linear-gradient(180deg, rgba(15, 20, 38, 0.82), rgba(8, 12, 22, 0.92));
+    box-shadow: var(--shadow), var(--glass-highlight);
+    backdrop-filter: blur(18px);
 }
 
 .brand-block {
@@ -86,16 +96,17 @@ textarea {
 .nav-link {
     padding: 10px 14px;
     border-radius: 999px;
-    background: rgba(87, 58, 40, 0.08);
+    background: rgba(255, 255, 255, 0.04);
     color: var(--muted);
+    border: 1px solid rgba(171, 193, 255, 0.08);
     font-weight: 700;
     transition: background 120ms ease, color 120ms ease, transform 120ms ease;
 }
 
 .nav-link:hover,
 .nav-link.active {
-    background: var(--accent);
-    color: white;
+    background: linear-gradient(135deg, rgba(255, 143, 71, 0.95), rgba(241, 201, 107, 0.92));
+    color: #1e1207;
     transform: translateY(-1px);
 }
 
@@ -133,8 +144,8 @@ textarea {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 24px;
-    box-shadow: var(--shadow);
-    backdrop-filter: blur(10px);
+    box-shadow: var(--shadow), var(--glass-highlight);
+    backdrop-filter: blur(18px);
 }
 
 .panel.strong {
@@ -142,8 +153,8 @@ textarea {
 }
 
 .panel.panel-alert {
-    border-color: rgba(165, 61, 45, 0.45);
-    box-shadow: 0 18px 50px rgba(165, 61, 45, 0.14);
+    border-color: rgba(255, 126, 126, 0.42);
+    box-shadow: 0 18px 50px rgba(114, 8, 16, 0.22), var(--glass-highlight);
 }
 
 .panel-pad {
@@ -181,8 +192,9 @@ textarea {
     gap: 8px;
     padding: 10px 14px;
     border-radius: 999px;
-    background: rgba(180, 84, 43, 0.1);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
     color: var(--accent-dark);
+    border: 1px solid rgba(171, 193, 255, 0.1);
     font-weight: 700;
 }
 
@@ -230,19 +242,26 @@ button:hover {
 }
 
 button.primary {
-    background: var(--accent);
-    color: white;
+    background: linear-gradient(135deg, rgba(255, 143, 71, 0.96), rgba(241, 201, 107, 0.94));
+    color: #1e1207;
 }
 
 button.secondary {
-    background: rgba(87, 58, 40, 0.08);
+    background: rgba(255, 255, 255, 0.06);
     color: var(--ink);
+    border: 1px solid rgba(171, 193, 255, 0.08);
 }
 
 button.ghost {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border);
     color: var(--ink);
+}
+
+button:disabled {
+    opacity: 0.52;
+    cursor: not-allowed;
+    transform: none;
 }
 
 .button-link {
@@ -257,12 +276,13 @@ button.ghost {
 }
 
 .button-link.secondary {
-    background: rgba(87, 58, 40, 0.08);
+    background: rgba(255, 255, 255, 0.06);
     color: var(--ink);
+    border: 1px solid rgba(171, 193, 255, 0.08);
 }
 
 .button-link.ghost {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border);
     color: var(--ink);
 }
@@ -279,7 +299,11 @@ button.ghost {
 }
 
 .chart-card {
-    padding: 20px;
+    padding: 24px;
+    background:
+        radial-gradient(circle at top left, rgba(93, 225, 255, 0.08), transparent 34%),
+        linear-gradient(180deg, rgba(20, 28, 49, 0.92), rgba(9, 13, 24, 0.98));
+    border-color: rgba(126, 164, 255, 0.18);
 }
 
 .chart-title {
@@ -320,8 +344,14 @@ textarea {
     border: 1px solid var(--border);
     border-radius: 14px;
     padding: 12px 14px;
-    background: rgba(255, 255, 255, 0.84);
+    background: rgba(7, 11, 22, 0.9);
     color: var(--ink);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: rgba(151, 165, 200, 0.72);
 }
 
 textarea {
@@ -335,13 +365,14 @@ textarea {
     border: 1px solid var(--border);
     border-radius: 18px;
     padding: 14px 16px;
-    background: rgba(255, 255, 255, 0.68);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .history-item.active,
 .lookup-item.active {
-    border-color: rgba(180, 84, 43, 0.45);
-    background: rgba(255, 245, 238, 0.96);
+    border-color: rgba(255, 143, 71, 0.44);
+    background: linear-gradient(180deg, rgba(255, 143, 71, 0.16), rgba(255, 255, 255, 0.05));
 }
 
 .history-topline,
@@ -407,9 +438,9 @@ textarea {
 .lookup-chart-stage {
     padding: 24px;
     background:
-        linear-gradient(180deg, rgba(255, 248, 238, 0.96), rgba(255, 252, 247, 0.96)),
-        radial-gradient(circle at top left, rgba(212, 162, 70, 0.18), transparent 35%);
-    border-color: rgba(180, 84, 43, 0.18);
+        radial-gradient(circle at top left, rgba(93, 225, 255, 0.12), transparent 32%),
+        linear-gradient(180deg, rgba(19, 28, 49, 0.96), rgba(8, 11, 20, 0.98));
+    border-color: rgba(126, 164, 255, 0.22);
 }
 
 .lookup-chart-header {
@@ -420,7 +451,7 @@ textarea {
 }
 
 .lookup-chart-stage canvas {
-    height: 360px !important;
+    height: min(52vh, 480px) !important;
 }
 
 .lookup-detail-grid {
@@ -446,9 +477,9 @@ textarea {
     border-radius: 28px;
     overflow: hidden;
     background:
-        radial-gradient(circle at top, rgba(42, 127, 134, 0.22), transparent 40%),
-        linear-gradient(180deg, rgba(227, 241, 239, 0.95), rgba(245, 249, 247, 0.98));
-    border: 1px solid rgba(42, 127, 134, 0.12);
+        radial-gradient(circle at top, rgba(93, 225, 255, 0.18), transparent 40%),
+        linear-gradient(180deg, rgba(16, 24, 42, 0.96), rgba(7, 11, 21, 0.99));
+    border: 1px solid rgba(93, 225, 255, 0.14);
 }
 
 .origin-world-map {
@@ -462,20 +493,20 @@ textarea {
 }
 
 .origin-map-grid line {
-    stroke: rgba(56, 122, 127, 0.12);
+    stroke: rgba(151, 190, 255, 0.12);
     stroke-width: 1;
 }
 
 .origin-map-land {
-    fill: rgba(114, 144, 115, 0.84);
-    stroke: rgba(66, 95, 69, 0.28);
+    fill: rgba(116, 154, 192, 0.68);
+    stroke: rgba(177, 214, 255, 0.16);
     stroke-width: 4;
     stroke-linejoin: round;
 }
 
 .origin-map-island {
-    fill: rgba(114, 144, 115, 0.84);
-    stroke: rgba(66, 95, 69, 0.24);
+    fill: rgba(116, 154, 192, 0.68);
+    stroke: rgba(177, 214, 255, 0.16);
     stroke-width: 2;
 }
 
@@ -504,23 +535,23 @@ textarea {
     border-radius: 999px;
     background: var(--accent);
     box-shadow:
-        0 0 0 5px rgba(180, 84, 43, 0.16),
-        0 10px 18px rgba(80, 46, 22, 0.18);
+        0 0 0 6px rgba(255, 143, 71, 0.16),
+        0 0 24px rgba(255, 143, 71, 0.32);
 }
 
 .origin-marker.active .origin-marker-dot {
     box-shadow:
-        0 0 0 7px rgba(42, 127, 134, 0.22),
-        0 10px 18px rgba(80, 46, 22, 0.18);
+        0 0 0 8px rgba(93, 225, 255, 0.18),
+        0 0 28px rgba(93, 225, 255, 0.34);
     background: var(--teal);
 }
 
 .origin-marker-label {
     padding: 4px 10px;
     border-radius: 999px;
-    background: rgba(255, 252, 247, 0.92);
-    border: 1px solid rgba(87, 58, 40, 0.12);
-    color: var(--accent-dark);
+    background: rgba(8, 12, 22, 0.92);
+    border: 1px solid rgba(171, 193, 255, 0.14);
+    color: var(--ink);
     font-size: 0.8rem;
     font-weight: 700;
     white-space: nowrap;
@@ -568,7 +599,7 @@ textarea {
     min-height: 106px;
     border: 1px solid var(--border);
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.04);
     padding: 12px;
     text-align: left;
     display: grid;
@@ -577,24 +608,24 @@ textarea {
 }
 
 .calendar-cell.has-roasts {
-    background: rgba(255, 244, 236, 0.96);
-    border-color: rgba(180, 84, 43, 0.28);
+    background: rgba(255, 143, 71, 0.12);
+    border-color: rgba(255, 143, 71, 0.24);
 }
 
 .calendar-cell.selected {
-    border-color: rgba(180, 84, 43, 0.72);
-    box-shadow: inset 0 0 0 1px rgba(180, 84, 43, 0.18);
+    border-color: rgba(255, 143, 71, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(255, 143, 71, 0.18);
 }
 
 .calendar-cell.today {
-    outline: 2px solid rgba(42, 127, 134, 0.22);
+    outline: 2px solid rgba(93, 225, 255, 0.26);
 }
 
 .calendar-cell.muted-cell {
     min-height: 106px;
-    border: 1px dashed rgba(87, 58, 40, 0.08);
+    border: 1px dashed rgba(171, 193, 255, 0.08);
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .calendar-day-number {
@@ -625,18 +656,18 @@ textarea {
 }
 
 .health-ok {
-    color: #1f7a46;
+    color: #68e5a0;
 }
 
 .health-fail {
-    color: #a53d2d;
+    color: #ff8f8f;
 }
 
 .hardware-issue-banner {
-    border: 1px solid rgba(165, 61, 45, 0.3);
+    border: 1px solid rgba(255, 126, 126, 0.26);
     border-radius: 18px;
     padding: 14px 16px;
-    background: rgba(255, 238, 235, 0.95);
+    background: rgba(63, 13, 18, 0.4);
 }
 
 .detail-title {
@@ -654,12 +685,12 @@ textarea {
     border-radius: 18px;
     border: 1px dashed var(--border);
     color: var(--muted);
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.03);
 }
 
 canvas {
     width: 100% !important;
-    height: 280px !important;
+    height: min(48vh, 420px) !important;
 }
 
 @media (max-width: 960px) {

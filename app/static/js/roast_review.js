@@ -30,9 +30,7 @@ function renderPendingRoast() {
         reviewMessageEl.textContent = "No roast is waiting for review.";
         reviewSubtitleEl.textContent = "Return to the roast page to begin a session.";
         reviewAnalyticsCopyEl.textContent = "No analytics are available because no roast is waiting for review.";
-        reviewTemperatureChart.data.labels = [];
-        reviewTemperatureChart.data.datasets[0].data = [];
-        reviewTemperatureChart.update();
+        setChartSeries(reviewTemperatureChart, []);
         return;
     }
 
@@ -66,16 +64,27 @@ function renderPendingRoast() {
         ? `This review includes the graph that will be saved. Development ran ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`
         : "First crack was not marked, so development metrics are limited for this roast.";
 
-    reviewTemperatureChart.data.labels = (pendingRoast.curve || []).map((point) => point.timestamp);
-    reviewTemperatureChart.data.datasets[0].data = (pendingRoast.curve || []).map((point) => Number(point.temperature));
-    reviewTemperatureChart.update();
+    setChartSeries(
+        reviewTemperatureChart,
+        buildChartSeries(pendingRoast.curve || [], {
+            startedAt: pendingRoast.started_at,
+            endedAt: pendingRoast.ended_at,
+        })
+    );
     setStageMarkers(reviewTemperatureChart, []);
     setStageBadges(
         reviewTemperatureChart,
         (pendingRoast.events || [])
             .filter((event) => event.chart_label)
             .map((event) => ({
-                label: event.chart_label,
+                x: toElapsedMinutes(
+                    event.chart_label,
+                    resolveChartBaseTime(pendingRoast.curve || [], {
+                        startedAt: pendingRoast.started_at,
+                        endedAt: pendingRoast.ended_at,
+                    }),
+                    pendingRoast.started_at
+                ),
                 text: event.label,
                 shortText: event.label
                     .split(" ")
@@ -85,6 +94,7 @@ function renderPendingRoast() {
                     .toUpperCase(),
                 color: event.color || "#7f3417",
             }))
+            .filter((event) => Number.isFinite(event.x))
     );
 
     if (!(pendingRoast.events || []).length) {
