@@ -46,6 +46,7 @@ input,
 select,
 textarea {
     font: inherit;
+    transition: all 0.2s ease;
 }
 
 .site-shell {
@@ -107,14 +108,15 @@ textarea {
     color: var(--muted);
     border: 1px solid rgba(171, 193, 255, 0.08);
     font-weight: 700;
-    transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .nav-link:hover,
 .nav-link.active {
     background: linear-gradient(135deg, rgba(255, 143, 71, 0.95), rgba(241, 201, 107, 0.92));
     color: #1e1207;
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 143, 71, 0.3);
 }
 
 .page-grid {
@@ -147,12 +149,24 @@ textarea {
     grid-template-columns: 1.25fr 0.75fr;
 }
 
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 .panel {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: var(--panel-radius);
     box-shadow: var(--shadow), var(--glass-highlight);
     backdrop-filter: blur(18px);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.panel:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 32px 90px rgba(0, 0, 0, 0.5), var(--glass-highlight);
 }
 
 .panel.strong {
@@ -273,6 +287,32 @@ button:disabled {
     transform: none;
 }
 
+/* Loading animation */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--accent);
+    animation: spin 1s ease-in-out infinite;
+}
+
 .button-link {
     display: inline-flex;
     align-items: center;
@@ -373,6 +413,15 @@ textarea {
     background: rgba(7, 11, 22, 0.9);
     color: var(--ink);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255, 143, 71, 0.2);
 }
 
 input::placeholder,
@@ -511,40 +560,17 @@ textarea {
 .origin-world-map {
     display: block;
     width: 100%;
-    height: 100%;
+    height: 360px;
+    border-radius: 28px;
 }
 
-.origin-map-ocean {
-    fill: url(#originOceanGradient);
-}
-
-.origin-map-grid line {
-    stroke: rgba(151, 190, 255, 0.12);
-    stroke-width: 1;
-}
-
-.origin-map-land {
-    fill: rgba(116, 154, 192, 0.68);
-    stroke: rgba(177, 214, 255, 0.16);
-    stroke-width: 4;
-    stroke-linejoin: round;
-}
-
-.origin-map-island {
-    fill: rgba(116, 154, 192, 0.68);
-    stroke: rgba(177, 214, 255, 0.16);
-    stroke-width: 2;
-}
-
-.origin-map-markers {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
+.leaflet-container {
+    background: rgba(7, 11, 21, 0.99);
+    border-radius: 28px;
+    font-family: inherit;
 }
 
 .origin-marker {
-    position: absolute;
-    transform: translate(-50%, -50%);
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -553,6 +579,12 @@ textarea {
     padding: 0;
     pointer-events: auto;
     cursor: pointer;
+    transition: transform 0.2s ease;
+    white-space: nowrap;
+}
+
+.origin-marker:hover {
+    transform: scale(1.1);
 }
 
 .origin-marker-dot {
@@ -631,6 +663,14 @@ textarea {
     display: grid;
     align-content: space-between;
     gap: 10px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.calendar-cell:hover {
+    background: rgba(255, 143, 71, 0.1);
+    border-color: rgba(255, 143, 71, 0.3);
+    transform: scale(1.02);
 }
 
 .lookup-sidebar,
@@ -972,6 +1012,11 @@ canvas {
         border-radius: 22px;
     }
 
+    .origin-world-map {
+        height: 250px;
+        border-radius: 22px;
+    }
+
     .origin-map-card-compact {
         min-height: 180px;
     }
@@ -1001,4 +1046,25 @@ canvas {
     .photo-preview {
         border-radius: 14px;
     }
+}
+
+.simulated-badge {
+    display: inline-block;
+    background: rgba(241, 201, 107, 0.15);
+    border: 1px solid rgba(241, 201, 107, 0.45);
+    color: var(--gold);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.message-disconnected {
+    background: rgba(165, 61, 45, 0.22) !important;
+    border-color: rgba(165, 61, 45, 0.5) !important;
+    color: #ff8a63 !important;
 }

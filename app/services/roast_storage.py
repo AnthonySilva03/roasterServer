@@ -1,8 +1,12 @@
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import current_app
+
+# Bump this when adding new columns or tables.
+_SCHEMA_VERSION = 2
 
 
 def init_db(app):
@@ -10,62 +14,102 @@ def init_db(app):
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     with sqlite3.connect(db_path) as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS roast_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                bean_name TEXT NOT NULL,
-                origin TEXT NOT NULL,
-                roast_level TEXT NOT NULL,
-                weight_grams REAL,
-                flame_level INTEGER,
-                total_roast_seconds INTEGER,
-                notes TEXT NOT NULL,
-                taste_notes TEXT NOT NULL DEFAULT '',
-                rating INTEGER,
-                sample_count INTEGER NOT NULL,
-                started_at TEXT NOT NULL,
-                ended_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                curve_json TEXT NOT NULL,
-                events_json TEXT NOT NULL DEFAULT '[]',
-                photo_data TEXT NOT NULL DEFAULT ''
-            )
-            """
-        )
-        existing_columns = {
-            row[1] for row in connection.execute("PRAGMA table_info(roast_sessions)")
-        }
-        if "events_json" not in existing_columns:
-            connection.execute(
-                "ALTER TABLE roast_sessions ADD COLUMN events_json TEXT NOT NULL DEFAULT '[]'"
-            )
-        if "photo_data" not in existing_columns:
-            connection.execute(
-                "ALTER TABLE roast_sessions ADD COLUMN photo_data TEXT NOT NULL DEFAULT ''"
-            )
-        if "taste_notes" not in existing_columns:
-            connection.execute(
-                "ALTER TABLE roast_sessions ADD COLUMN taste_notes TEXT NOT NULL DEFAULT ''"
-            )
-        if "rating" not in existing_columns:
-            connection.execute(
-                "ALTER TABLE roast_sessions ADD COLUMN rating INTEGER"
-            )
-        if "weight_grams" not in existing_columns:
-            connection.execute(
-                "ALTER TABLE roast_sessions ADD COLUMN weight_grams REAL"
-            )
-        if "flame_level" not in existing_columns:
-            connection.execute(
-                "ALTER TABLE roast_sessions ADD COLUMN flame_level INTEGER"
-            )
-        if "total_roast_seconds" not in existing_columns:
-            connection.execute(
-                "ALTER TABLE roast_sessions ADD COLUMN total_roast_seconds INTEGER"
-            )
+        _ensure_schema_version_table(connection)
+        current_version = _get_schema_version(connection)
+        _apply_migrations(connection, current_version)
         connection.commit()
 
+
+# ---------------------------------------------------------------------------
+# Schema management
+# ---------------------------------------------------------------------------
+
+def _ensure_schema_version_table(connection):
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _get_schema_version(connection):
+    row = connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
+    return row[0] or 0
+
+
+def _record_version(connection, version):
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    connection.execute(
+        "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?, ?)",
+        (version, now),
+    )
+
+
+def _apply_migrations(connection, from_version):
+    if from_version < 1:
+        _migrate_v1(connection)
+        _record_version(connection, 1)
+
+    if from_version < 2:
+        _migrate_v2(connection)
+        _record_version(connection, 2)
+
+
+def _migrate_v1(connection):
+    """Create roast_sessions table and backfill columns added before versioning."""
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS roast_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bean_name TEXT NOT NULL,
+            origin TEXT NOT NULL,
+            roast_level TEXT NOT NULL,
+            weight_grams REAL,
+            flame_level INTEGER,
+            total_roast_seconds INTEGER,
+            notes TEXT NOT NULL,
+            taste_notes TEXT NOT NULL DEFAULT '',
+            rating INTEGER,
+            sample_count INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            ended_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            curve_json TEXT NOT NULL,
+            events_json TEXT NOT NULL DEFAULT '[]',
+            photo_data TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    existing = {row[1] for row in connection.execute("PRAGMA table_info(roast_sessions)")}
+    additions = [
+        ("events_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("photo_data", "TEXT NOT NULL DEFAULT ''"),
+        ("taste_notes", "TEXT NOT NULL DEFAULT ''"),
+        ("rating", "INTEGER"),
+        ("weight_grams", "REAL"),
+        ("flame_level", "INTEGER"),
+        ("total_roast_seconds", "INTEGER"),
+    ]
+    for col, definition in additions:
+        if col not in existing:
+            connection.execute(f"ALTER TABLE roast_sessions ADD COLUMN {col} {definition}")
+
+
+def _migrate_v2(connection):
+    """Add photo_filename column for on-disk photo storage."""
+    existing = {row[1] for row in connection.execute("PRAGMA table_info(roast_sessions)")}
+    if "photo_filename" not in existing:
+        connection.execute(
+            "ALTER TABLE roast_sessions ADD COLUMN photo_filename TEXT NOT NULL DEFAULT ''"
+        )
+
+
+# ---------------------------------------------------------------------------
+# CRUD
+# ---------------------------------------------------------------------------
 
 def save_roast_session(payload):
     flame_level = _normalize_flame_level(payload.get("flame_level"))
@@ -87,7 +131,7 @@ def save_roast_session(payload):
         payload["created_at"],
         json.dumps(curve),
         json.dumps(events),
-        payload.get("photo_data", ""),
+        payload.get("photo_filename", "") or "",
     )
 
     with sqlite3.connect(_database_path()) as connection:
@@ -109,7 +153,7 @@ def save_roast_session(payload):
                 created_at,
                 curve_json,
                 events_json,
-                photo_data
+                photo_filename
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             row,
@@ -139,7 +183,7 @@ def list_roast_sessions(limit=8):
                 started_at,
                 ended_at,
                 created_at,
-                photo_data
+                photo_filename
             FROM roast_sessions
             ORDER BY id DESC
         """
@@ -151,7 +195,7 @@ def list_roast_sessions(limit=8):
 
         rows = connection.execute(query, params).fetchall()
 
-    return [dict(row) for row in rows]
+    return [_format_list_row(row) for row in rows]
 
 
 def get_roast_session(roast_id):
@@ -176,7 +220,8 @@ def get_roast_session(roast_id):
                 created_at,
                 curve_json,
                 events_json,
-                photo_data
+                photo_data,
+                photo_filename
             FROM roast_sessions
             WHERE id = ?
             """,
@@ -192,6 +237,15 @@ def get_roast_session(roast_id):
     roast["events"] = json.loads(roast.pop("events_json") or "[]")
     roast["curve"] = _normalize_curve(roast["curve"], roast["flame_level"])
     roast["events"] = _normalize_events(roast["events"], roast["flame_level"])
+
+    photo_filename = roast.get("photo_filename", "") or ""
+    if photo_filename:
+        roast["photo_url"] = f"/uploads/{photo_filename}"
+        roast["photo_data"] = ""
+    else:
+        roast["photo_url"] = ""
+        # photo_data kept as-is for legacy rows that stored base64 directly
+
     return roast
 
 
@@ -269,6 +323,10 @@ def delete_roast_session(roast_id):
     return cursor.rowcount > 0
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def _database_path(app=None):
     flask_app = app or current_app
     configured = flask_app.config["SQLALCHEMY_DATABASE_URI"]
@@ -278,6 +336,13 @@ def _database_path(app=None):
         return Path(flask_app.instance_path) / relative
 
     return Path(configured)
+
+
+def _format_list_row(row):
+    result = dict(row)
+    photo_filename = result.get("photo_filename", "") or ""
+    result["photo_url"] = f"/uploads/{photo_filename}" if photo_filename else ""
+    return result
 
 
 def _normalize_flame_level(value):

@@ -116,12 +116,15 @@ def _run_nmcli(app, arguments, check=True):
     command.append(app.config["WIFI_NMCLI_BINARY"])
     command.extend(arguments)
 
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise WifiCommandError(f"Failed to run Wi-Fi command: {exc}") from exc
 
     if check and result.returncode != 0:
         error_text = (result.stderr or result.stdout or "Wi-Fi command failed").strip()

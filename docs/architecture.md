@@ -66,7 +66,7 @@ Provides a single `SensorService` abstraction that either reads real hardware da
 
 ### `app/services/roast_storage.py`
 
-Handles SQLite setup and roast-session persistence without requiring a full ORM.
+Handles SQLite setup and roast-session persistence without requiring a full ORM. Uses a `schema_version` table to track additive column migrations. Photos are stored on disk at `instance/uploads/<uuid>.<ext>`; the DB stores `photo_filename`. Legacy records retain `photo_data` (base64).
 
 ## Data Flow
 
@@ -116,6 +116,10 @@ dashboard / roast widget
 
 That split keeps the app easier to extend without mixing UI routes, sensor logic, and storage details in the same files.
 
+## Origin Maps
+
+Both the dashboard and lookup page render an interactive world map using Leaflet (`origin_map.js`). `renderOriginMarkers(containerEl, origins, selectedKey, onSelect)` creates a Leaflet map in `containerEl` on first call (module-level singleton per page load). Marker clicks fire the `onSelect(key)` callback. Every page that includes a map must load `leaflet.js` before `origin_map.js`.
+
 ## Responsibility Map
 
 ```text
@@ -126,15 +130,19 @@ app/__init__.py
   -> build app
   -> load config
   -> register routes/sockets
+  -> init DB + run schema migrations
 
 app/web/routes.py
   -> HTML pages
   -> JSON APIs
+  -> photo validation + disk storage
+  -> serve uploaded photos (/uploads/<filename>)
 
 app/sockets.py
   -> live stream
   -> roast controls
   -> flame_level updates
+  -> simulated flag on sensor_state events
 
 app/services/sensor_service.py
   -> MAX6675 reading
@@ -142,6 +150,13 @@ app/services/sensor_service.py
   -> hardware health
 
 app/services/roast_storage.py
-  -> save/load roast sessions
+  -> save/load/update/delete roast sessions
+  -> schema versioning (schema_version table)
+  -> photo file cleanup on delete
   -> summary queries
+
+app/static/js/origin_map.js
+  -> Leaflet map init (singleton)
+  -> coffee-region alias matching
+  -> origin marker rendering
 ```

@@ -79,12 +79,14 @@ def handle_connect():
         sensor_service.active if sensor_service else False,
         sensor_service.source_name if sensor_service else "unknown",
     )
+    source = sensor_service.source_name if sensor_service else "unknown"
     emit(
         "sensor_state",
         {
             "active": sensor_service.active if sensor_service else False,
-            "source": sensor_service.source_name if sensor_service else "unknown",
+            "source": source,
             "flame_level": sensor_service.health_status()["flame_level"] if sensor_service else 0,
+            "simulated": source == "simulated",
         },
     )
     if latest_sample:
@@ -130,5 +132,6 @@ def handle_control(data):
             "active": sensor_service.active,
             "source": sensor_service.source_name,
             "flame_level": sensor_service.health_status()["flame_level"],
+            "simulated": sensor_service.source_name == "simulated",
         },
     )

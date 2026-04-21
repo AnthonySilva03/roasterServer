@@ -2,7 +2,7 @@ import os
 
 
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "devkey")
+    SECRET_KEY = os.environ.get("SECRET_KEY", "3920rjsohipdsaj3r9sdf8")
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", "sqlite:///roasts.db"
     )

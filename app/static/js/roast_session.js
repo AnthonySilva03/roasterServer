@@ -27,6 +27,7 @@ const roastHardwareModeEl = document.getElementById("roastHardwareMode");
 const roastHardwareErrorEl = document.getElementById("roastHardwareError");
 const roastLatestIssueEl = document.getElementById("roastLatestIssue");
 const roastLatestIssueTextEl = document.getElementById("roastLatestIssueText");
+const simulatedBadgeEl = document.getElementById("simulatedBadge");
 const analyticsDurationEl = document.getElementById("analyticsDuration");
 const analyticsDevelopmentEl = document.getElementById("analyticsDevelopment");
 const analyticsDevelopmentRatioEl = document.getElementById("analyticsDevelopmentRatio");
@@ -297,16 +298,24 @@ async function loadRoastHardwareHealth() {
 roastSessionSocket.on("connect", () => {
     sensorStatusEl.textContent = "Connected";
     sessionMessageEl.textContent = "Roast session connected. Use Pre Roast to begin logging.";
+    sessionMessageEl.classList.remove("message-disconnected");
 });
 
 roastSessionSocket.on("disconnect", () => {
     sensorStatusEl.textContent = "Disconnected";
-    sessionMessageEl.textContent = "Trying to reconnect to the temperature stream...";
+    sessionMessageEl.textContent = "Connection lost — trying to reconnect to the temperature stream.";
+    sessionMessageEl.classList.add("message-disconnected");
+    if (simulatedBadgeEl) {
+        simulatedBadgeEl.style.display = "none";
+    }
 });
 
 roastSessionSocket.on("sensor_state", (state) => {
     sensorStatusEl.textContent = state.active ? "Streaming" : "Paused";
     sensorSourceEl.textContent = state.source || "Unknown";
+    if (simulatedBadgeEl) {
+        simulatedBadgeEl.style.display = state.simulated ? "inline" : "none";
+    }
     if (state.flame_level !== undefined) {
         flameControlEl.value = String(state.flame_level);
         flameValueEl.textContent = `${state.flame_level}%`;

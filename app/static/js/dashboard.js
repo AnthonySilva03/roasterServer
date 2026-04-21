@@ -15,7 +15,7 @@ const calendarPrevButtonEl = document.getElementById("calendarPrevButton");
 const calendarTodayButtonEl = document.getElementById("calendarTodayButton");
 const calendarNextButtonEl = document.getElementById("calendarNextButton");
 const originMapSummaryEl = document.getElementById("originMapSummary");
-const originMapMarkersEl = document.getElementById("originMapMarkers");
+const originMapContainerEl = document.getElementById("originWorldMap");
 const originMapCountEl = document.getElementById("originMapCount");
 const originMapLegendEl = document.getElementById("originMapLegend");
 const originSelectionLabelEl = document.getElementById("originSelectionLabel");
@@ -26,6 +26,7 @@ const hardwareFlameLevelEl = document.getElementById("hardwareFlameLevel");
 const hardwareModeEl = document.getElementById("hardwareMode");
 const hardwareErrorEl = document.getElementById("hardwareError");
 const hardwareHealthSummaryEl = document.getElementById("hardwareHealthSummary");
+const simulatedBadgeEl = document.getElementById("simulatedBadge");
 
 let dashboardRoasts = [];
 let currentMonth = new Date();
@@ -95,7 +96,7 @@ function renderOriginMap() {
     if (!dashboardRoasts.length) {
         originMapSummaryEl.textContent = "Save roasts to start plotting roasted origins around the world.";
         originMapCountEl.textContent = "0";
-        originMapMarkersEl.innerHTML = "";
+        renderOriginMarkers(originMapContainerEl, [], null, null);
         originMapLegendEl.innerHTML = '<div class="empty-state">Origin markers will appear after roast sessions load.</div>';
         originSelectionLabelEl.textContent = "Choose a map marker to inspect all roasts from that origin.";
         originSelectionListEl.innerHTML = '<div class="empty-state">No origin selected.</div>';
@@ -107,7 +108,7 @@ function renderOriginMap() {
 
     if (!mappedOrigins.length) {
         originMapSummaryEl.textContent = "Saved origins have not matched a map coordinate yet.";
-        originMapMarkersEl.innerHTML = "";
+        renderOriginMarkers(originMapContainerEl, [], null, null);
         originMapLegendEl.innerHTML = '<div class="empty-state">No mapped origins yet. Try saving roasts with country names in the origin field.</div>';
         originSelectionLabelEl.textContent = "Choose a map marker to inspect all roasts from that origin.";
         originSelectionListEl.innerHTML = '<div class="empty-state">No origin selected.</div>';
@@ -123,12 +124,9 @@ function renderOriginMap() {
 
     originMapSummaryEl.textContent = `${mappedOrigins.length} mapped origin${mappedOrigins.length === 1 ? "" : "s"} from ${dashboardRoasts.length} saved roast session${dashboardRoasts.length === 1 ? "" : "s"}.`;
 
-    renderOriginMarkers(originMapMarkersEl, mappedOrigins, selectedOriginKey);
-    originMapMarkersEl.querySelectorAll("[data-origin-key]").forEach((button) => {
-        button.addEventListener("click", () => {
-            selectedOriginKey = button.dataset.originKey;
-            renderOriginMap();
-        });
+    renderOriginMarkers(originMapContainerEl, mappedOrigins, selectedOriginKey, (key) => {
+        selectedOriginKey = key;
+        renderOriginMap();
     });
 
     originMapLegendEl.innerHTML = mappedOrigins.map((origin) => `
@@ -292,16 +290,24 @@ async function loadDashboardCalendar() {
 dashboardSocket.on("connect", () => {
     dashboardStatusEl.textContent = "Connected";
     dashboardMessageEl.textContent = "Socket connection established.";
+    dashboardMessageEl.classList.remove("message-disconnected");
 });
 
 dashboardSocket.on("disconnect", () => {
     dashboardStatusEl.textContent = "Disconnected";
-    dashboardMessageEl.textContent = "Trying to reconnect to the server...";
+    dashboardMessageEl.textContent = "Connection lost — trying to reconnect to the server.";
+    dashboardMessageEl.classList.add("message-disconnected");
+    if (simulatedBadgeEl) {
+        simulatedBadgeEl.style.display = "none";
+    }
 });
 
 dashboardSocket.on("sensor_state", (state) => {
     dashboardStatusEl.textContent = state.active ? "Streaming" : "Paused";
     dashboardSourceEl.textContent = state.source || "Unknown";
+    if (simulatedBadgeEl) {
+        simulatedBadgeEl.style.display = state.simulated ? "inline" : "none";
+    }
     if (state.flame_level !== undefined) {
         hardwareFlameLevelEl.textContent = `${state.flame_level}%`;
     }

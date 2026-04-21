@@ -55,7 +55,11 @@ def test_create_and_fetch_roast(client):
                 "temperature": 201.2,
                 "flame_level": 50,
             }],
-            "photo_data": "data:image/png;base64,abc123",
+            "photo_data": (
+                "data:image/png;base64,"
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8"
+                "/5+hHgAHggJ/PchI6QAAAABJRU5ErkJggg=="
+            ),
             "curve": [
                 {
                     "timestamp": "12:00:05",
@@ -79,7 +83,8 @@ def test_create_and_fetch_roast(client):
     assert detail["events"][0]["label"] == "Start"
     assert detail["events"][0]["chart_label"] == "12:00:05"
     assert detail["events"][0]["flame_level"] == 50
-    assert detail["photo_data"] == "data:image/png;base64,abc123"
+    assert detail["photo_url"].startswith("/uploads/")
+    assert detail["photo_data"] == ""
     assert detail["weight_grams"] == 350.5
     assert detail["flame_level"] == 60
     assert detail["total_roast_seconds"] == 600
@@ -390,6 +395,125 @@ def test_wifi_scan_parser_handles_escaped_colons():
         "78",
         "WPA2",
     ]
+
+
+def test_get_missing_roast_returns_404(client):
+    response = client.get("/api/roasts/99999")
+    assert response.status_code == 404
+
+
+def test_patch_missing_roast_returns_404(client):
+    response = client.patch(
+        "/api/roasts/99999",
+        json={"bean_name": "Ghost", "origin": "Kenya", "roast_level": "Light"},
+    )
+    assert response.status_code == 404
+
+
+def test_create_roast_malformed_body_returns_400(client):
+    response = client.post(
+        "/api/roasts",
+        data="not json at all",
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+
+
+def test_create_roast_rejects_photo_invalid_type(client):
+    import base64
+    bad_photo = "data:text/plain;base64," + base64.b64encode(b"hello world").decode()
+    response = client.post(
+        "/api/roasts",
+        json={
+            "bean_name": "Photo Type Test",
+            "origin": "Kenya",
+            "roast_level": "Light",
+            "started_at": "2026-04-15T12:00:00Z",
+            "ended_at": "2026-04-15T12:10:00Z",
+            "photo_data": bad_photo,
+        },
+    )
+    assert response.status_code == 400
+    assert "Photo must be" in response.get_json()["error"]
+
+
+def test_create_roast_rejects_photo_too_large(client):
+    oversized = "data:image/png;base64," + "A" * 7_000_001
+    response = client.post(
+        "/api/roasts",
+        json={
+            "bean_name": "Big Photo Test",
+            "origin": "Kenya",
+            "roast_level": "Light",
+            "started_at": "2026-04-15T12:00:00Z",
+            "ended_at": "2026-04-15T12:10:00Z",
+            "photo_data": oversized,
+        },
+    )
+    assert response.status_code == 400
+    assert "exceeds" in response.get_json()["error"]
+
+
+def test_create_roast_with_valid_photo_saves_to_disk(client):
+    from pathlib import Path
+
+    # Minimal 1×1 pixel PNG base64
+    tiny_png = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8"
+        "/5+hHgAHggJ/PchI6QAAAABJRU5ErkJggg=="
+    )
+    response = client.post(
+        "/api/roasts",
+        json={
+            "bean_name": "Photo Roast",
+            "origin": "Kenya",
+            "roast_level": "Light",
+            "started_at": "2026-04-15T12:00:00Z",
+            "ended_at": "2026-04-15T12:10:00Z",
+            "curve": [],
+            "photo_data": tiny_png,
+        },
+    )
+    assert response.status_code == 201
+    roast = response.get_json()
+    assert roast["photo_url"].startswith("/uploads/")
+    assert roast["photo_data"] == ""
+
+    upload_folder = client.application.config["UPLOAD_FOLDER"]
+    filename = roast["photo_url"].split("/")[-1]
+    assert Path(upload_folder, filename).exists()
+
+
+def test_delete_roast_removes_photo_file(client):
+    from pathlib import Path
+
+    tiny_png = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8"
+        "/5+hHgAHggJ/PchI6QAAAABJRU5ErkJggg=="
+    )
+    create_response = client.post(
+        "/api/roasts",
+        json={
+            "bean_name": "Doomed Photo Roast",
+            "origin": "Kenya",
+            "roast_level": "Light",
+            "started_at": "2026-04-15T12:00:00Z",
+            "ended_at": "2026-04-15T12:10:00Z",
+            "curve": [],
+            "photo_data": tiny_png,
+        },
+    )
+    roast = create_response.get_json()
+    filename = roast["photo_url"].split("/")[-1]
+    upload_folder = client.application.config["UPLOAD_FOLDER"]
+    photo_path = Path(upload_folder, filename)
+    assert photo_path.exists()
+
+    delete_response = client.delete(f"/api/roasts/{roast['id']}")
+    assert delete_response.status_code == 200
+    assert not photo_path.exists()
 
 
 def test_update_roast_feedback_rejects_invalid_rating(client):

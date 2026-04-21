@@ -2,7 +2,7 @@ const lookupListEl = document.getElementById("lookupList");
 const lookupSearchInputEl = document.getElementById("lookupSearchInput");
 const lookupSearchSummaryEl = document.getElementById("lookupSearchSummary");
 const lookupOriginMapSummaryEl = document.getElementById("lookupOriginMapSummary");
-const lookupOriginMapMarkersEl = document.getElementById("lookupOriginMapMarkers");
+const lookupOriginWorldMapEl = document.getElementById("lookupOriginWorldMap");
 const clearOriginFilterButtonEl = document.getElementById("clearOriginFilterButton");
 const refreshLookupButtonEl = document.getElementById("refreshLookupButton");
 const summaryRoastsEl = document.getElementById("summaryRoasts");
@@ -110,12 +110,9 @@ function renderLookupOriginMap() {
         ? `Filtering lookup to ${(selectedOrigin && selectedOrigin.canonicalLabel) || "selected origin"}.`
         : `Click a mapped origin to filter ${mappedOrigins.length} origin${mappedOrigins.length === 1 ? "" : "s"}.`;
 
-    renderOriginMarkers(lookupOriginMapMarkersEl, mappedOrigins, selectedOriginKey);
-    lookupOriginMapMarkersEl.querySelectorAll("[data-origin-key]").forEach((button) => {
-        button.addEventListener("click", () => {
-            selectedOriginKey = button.dataset.originKey;
-            renderLookupView();
-        });
+    renderOriginMarkers(lookupOriginWorldMapEl, mappedOrigins, selectedOriginKey, (key) => {
+        selectedOriginKey = key;
+        renderLookupView();
     });
     clearOriginFilterButtonEl.disabled = !selectedOriginKey;
 }
@@ -286,8 +283,9 @@ function setLookupDetail(roast) {
             .filter((event) => Number.isFinite(event.x))
     );
 
-    if (roast.photo_data) {
-        detailPhotoEl.src = roast.photo_data;
+    const photoSrc = roast.photo_url || roast.photo_data || "";
+    if (photoSrc) {
+        detailPhotoEl.src = photoSrc;
         detailPhotoWrapEl.style.display = "block";
     } else {
         detailPhotoEl.removeAttribute("src");

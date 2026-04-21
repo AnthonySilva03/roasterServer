@@ -1,6 +1,10 @@
+import base64
+import re
+import uuid
 from datetime import datetime
+from pathlib import Path
 
-from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 from app import sockets as sockets_module
 from app.services.roast_storage import (
@@ -15,6 +19,9 @@ from app.services import wifi_service
 
 
 main = Blueprint("main", __name__)
+
+_ALLOWED_PHOTO_TYPES = re.compile(r'^data:image/(jpeg|jpg|png|gif|webp);base64,')
+_MAX_PHOTO_BYTES = 7_000_000  # ~5 MB raw after base64 decode
 
 
 @main.route("/")
@@ -114,6 +121,14 @@ def wifi_setup_page():
         wifi_interface=current_app.config["WIFI_INTERFACE"],
         hide_site_nav=True,
     )
+
+
+@main.route("/uploads/<filename>")
+def uploaded_file(filename):
+    upload_folder = current_app.config.get("UPLOAD_FOLDER", "")
+    if not upload_folder or not re.match(r'^[\w\-]+\.\w{2,5}$', filename):
+        abort(404)
+    return send_from_directory(upload_folder, filename)
 
 
 @main.route("/api/setup/wifi/networks", methods=["GET"])
@@ -268,10 +283,24 @@ def patch_roast(roast_id):
 
 @main.route("/api/roasts/<int:roast_id>", methods=["DELETE"])
 def delete_roast(roast_id):
-    deleted = delete_roast_session(roast_id)
-    if not deleted:
+    roast = get_roast_session(roast_id)
+    if roast is None:
         current_app.logger.warning("Attempted to delete missing roast", extra={"roast_id": roast_id})
         abort(404)
+
+    delete_roast_session(roast_id)
+
+    photo_filename = roast.get("photo_filename", "")
+    if photo_filename:
+        upload_folder = current_app.config.get("UPLOAD_FOLDER", "")
+        if upload_folder:
+            try:
+                Path(upload_folder, photo_filename).unlink(missing_ok=True)
+            except OSError:
+                current_app.logger.warning(
+                    "Failed to delete photo file",
+                    extra={"photo_filename": photo_filename, "roast_id": roast_id},
+                )
 
     current_app.logger.info("Deleted roast session", extra={"roast_id": roast_id})
     return jsonify({"deleted": True, "roast_id": roast_id})
@@ -325,6 +354,15 @@ def create_roast():
         if payload["flame_level"] < 0 or payload["flame_level"] > 100:
             return jsonify({"error": "Flame level must be between 0 and 100."}), 400
 
+    photo_data = str(payload.pop("photo_data", "") or "")
+    if photo_data:
+        if not _ALLOWED_PHOTO_TYPES.match(photo_data):
+            return jsonify({"error": "Photo must be a JPEG, PNG, GIF, or WebP image."}), 400
+        if len(photo_data) > _MAX_PHOTO_BYTES:
+            return jsonify({"error": "Photo exceeds the 5 MB size limit."}), 400
+
+    payload["photo_filename"] = _save_photo_to_disk(photo_data)
+
     payload["created_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
     roast = save_roast_session(payload)
     current_app.logger.info(
@@ -337,6 +375,7 @@ def create_roast():
             "flame_level": roast["flame_level"],
             "total_roast_seconds": roast["total_roast_seconds"],
             "sample_count": roast["sample_count"],
+            "has_photo": bool(roast.get("photo_filename")),
         },
     )
     return jsonify(roast), 201
@@ -345,6 +384,28 @@ def create_roast():
 def _require_wifi_setup_mode():
     if not wifi_service.is_setup_mode_enabled(current_app):
         abort(404)
+
+
+def _save_photo_to_disk(photo_data):
+    if not photo_data:
+        return ""
+
+    upload_folder = current_app.config.get("UPLOAD_FOLDER", "")
+    if not upload_folder:
+        return ""
+
+    try:
+        header, encoded = photo_data.split(",", 1)
+        ext_match = re.search(r'image/(\w+)', header)
+        ext = ext_match.group(1) if ext_match else "jpg"
+        if ext == "jpeg":
+            ext = "jpg"
+        filename = f"{uuid.uuid4().hex}.{ext}"
+        Path(upload_folder, filename).write_bytes(base64.b64decode(encoded))
+        return filename
+    except Exception:
+        current_app.logger.exception("Failed to save photo to disk")
+        return ""
 
 
 @main.route("/api/sensor/health", methods=["GET"])

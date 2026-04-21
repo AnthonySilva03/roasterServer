@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from flask import Flask
 from flask_socketio import SocketIO
@@ -54,10 +55,19 @@ def create_app(test_config=None):
     from .sockets import register_socket_handlers
     register_socket_handlers(app)
 
+    if not app.testing and app.config.get("SECRET_KEY") == "devkey":
+        raise RuntimeError(
+            "SECRET_KEY is set to the insecure default 'devkey'. "
+            "Set the SECRET_KEY environment variable to a strong random value."
+        )
+
     from .services.roast_storage import init_db
 
     with app.app_context():
         init_db(app)
+        upload_folder = Path(app.instance_path) / "uploads"
+        upload_folder.mkdir(parents=True, exist_ok=True)
+        app.config["UPLOAD_FOLDER"] = str(upload_folder)
 
     app.logger.info(
         "App created",

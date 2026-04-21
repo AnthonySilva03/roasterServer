@@ -1,16 +1,16 @@
 const coffeeOriginCatalog = [
     { key: "brazil", label: "Brazil", lat: -18.1, lng: -47.9, aliases: ["brazil", "sul de minas", "cerrado", "mogiana", "bahia", "minas gerais"] },
     { key: "colombia", label: "Colombia", lat: 2.6, lng: -76.6, aliases: ["colombia", "huila", "narino", "nariño", "tolima", "cauca", "antioquia", "medellin"] },
-    { key: "costa_rica", label: "Costa Rica", lat: 9.6, lng: -84.2, aliases: ["costa rica", "tarrazu", "tarrazú", "tres rios", "tres ríos", "west valley", "central valley", "brunca"] },
-    { key: "guatemala", label: "Guatemala", lat: 15.3, lng: -91.5, aliases: ["guatemala", "huehuetenango", "antigua", "atitlan", "atitlán", "coban", "cobán", "fraijanes"] },
-    { key: "honduras", label: "Honduras", lat: 14.9, lng: -88.0, aliases: ["honduras", "copan", "copán", "comayagua", "el paraiso", "el paraíso", "santa barbara", "santa bárbara"] },
+    { key: "costa_rica", label: "Costa Rica", lat: 9.6, lng: -84.2, aliases: ["costa rica", "tarrazu", "tarrazú", "tres rios", "tres ríos", "west valley", "central valley", "brunca"] },
+    { key: "guatemala", label: "Guatemala", lat: 15.3, lng: -91.5, aliases: ["guatemala", "huehuetenango", "antigua", "atitlan", "atitlán", "coban", "cobán", "fraijanes"] },
+    { key: "honduras", label: "Honduras", lat: 14.9, lng: -88.0, aliases: ["honduras", "copan", "copán", "comayagua", "el paraiso", "el paraíso", "santa barbara", "santa bárbara"] },
     { key: "nicaragua", label: "Nicaragua", lat: 13.1, lng: -85.9, aliases: ["nicaragua", "jinotega", "matagalpa", "nueva segovia"] },
-    { key: "mexico", label: "Mexico", lat: 16.8, lng: -92.6, aliases: ["mexico", "méxico", "chiapas", "oaxaca", "veracruz", "puebla"] },
-    { key: "peru", label: "Peru", lat: -6.2, lng: -77.9, aliases: ["peru", "perú", "cajamarca", "cusco", "amazonas", "junin", "junín"] },
-    { key: "panama", label: "Panama", lat: 8.8, lng: -82.4, aliases: ["panama", "panamá", "boquete", "volcan", "volcán", "baru", "geisha", "gesha"] },
+    { key: "mexico", label: "Mexico", lat: 16.8, lng: -92.6, aliases: ["mexico", "méxico", "chiapas", "oaxaca", "veracruz", "puebla"] },
+    { key: "peru", label: "Peru", lat: -6.2, lng: -77.9, aliases: ["peru", "perú", "cajamarca", "cusco", "amazonas", "junin", "junín"] },
+    { key: "panama", label: "Panama", lat: 8.8, lng: -82.4, aliases: ["panama", "panamá", "boquete", "volcan", "volcán", "baru", "geisha", "gesha"] },
     { key: "ecuador", label: "Ecuador", lat: -3.8, lng: -79.2, aliases: ["ecuador", "loja", "zamora"] },
     { key: "bolivia", label: "Bolivia", lat: -15.6, lng: -67.5, aliases: ["bolivia", "caranavi", "yungas"] },
-    { key: "el_salvador", label: "El Salvador", lat: 13.9, lng: -89.7, aliases: ["el salvador", "ahuachapan", "ahuachapán", "santa ana", "apaneca"] },
+    { key: "el_salvador", label: "El Salvador", lat: 13.9, lng: -89.7, aliases: ["el salvador", "ahuachapan", "ahuachapán", "santa ana", "apaneca"] },
     { key: "ethiopia", label: "Ethiopia", lat: 6.9, lng: 38.3, aliases: ["ethiopia", "yirgacheffe", "sidamo", "sidama", "guji", "limu", "jimma", "lekempti"] },
     { key: "kenya", label: "Kenya", lat: 0.5, lng: 37.2, aliases: ["kenya", "nyeri", "kirinyaga", "embu", "kiambu"] },
     { key: "rwanda", label: "Rwanda", lat: -2.2, lng: 29.4, aliases: ["rwanda", "kivu", "nyamasheke", "gakenke", "huye"] },
@@ -31,7 +31,7 @@ const coffeeOriginCatalog = [
 function normalizeOriginText(origin) {
     return String(origin || "")
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[̀-ͯ]/g, "")
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, " ")
         .trim();
@@ -67,12 +67,6 @@ function resolveOriginLocation(origin) {
     return bestMatch;
 }
 
-function projectOriginCoordinate(point) {
-    const left = ((point.lng + 180) / 360) * 100;
-    const top = ((90 - point.lat) / 180) * 100;
-    return { left, top };
-}
-
 function buildMappedOrigins(roasts) {
     const groupedOrigins = (roasts || []).reduce((accumulator, roast) => {
         const resolvedOrigin = resolveOriginLocation(roast.origin);
@@ -103,22 +97,59 @@ function buildMappedOrigins(roasts) {
     return Object.values(groupedOrigins).sort((left, right) => right.count - left.count);
 }
 
-function renderOriginMarkers(markersEl, mappedOrigins, selectedOriginKey) {
-    markersEl.innerHTML = mappedOrigins.map((origin) => {
-        const placement = projectOriginCoordinate(origin.point);
-        const markerSize = Math.min(22, 12 + (origin.count - 1) * 2);
-        const activeClass = origin.key === selectedOriginKey ? "active" : "";
-        return `
-            <button
-                type="button"
-                class="origin-marker ${activeClass}"
-                data-origin-key="${origin.key}"
-                style="left: ${placement.left}%; top: ${placement.top}%;"
-                title="${origin.label} matched to ${origin.canonicalLabel} (${origin.count})"
-            >
-                <span class="origin-marker-dot" style="width: ${markerSize}px; height: ${markerSize}px;"></span>
-                <span class="origin-marker-label">${origin.canonicalLabel}</span>
-            </button>
-        `;
-    }).join("");
+let _originMap = null;
+let _originMarkers = {};
+
+function _initOriginMap(containerEl) {
+    if (_originMap) {
+        return;
+    }
+    _originMap = L.map(containerEl, {
+        center: [20, 10],
+        zoom: 2,
+        zoomControl: false,
+        scrollWheelZoom: false,
+        attributionControl: false,
+        minZoom: 2,
+        maxZoom: 6,
+        worldCopyJump: true,
+    });
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        subdomains: "abcd",
+        maxZoom: 19,
+    }).addTo(_originMap);
+}
+
+function clearOriginMarkers() {
+    Object.values(_originMarkers).forEach((m) => {
+        if (_originMap) {
+            _originMap.removeLayer(m);
+        }
+    });
+    _originMarkers = {};
+}
+
+function renderOriginMarkers(containerEl, mappedOrigins, selectedOriginKey, onSelect) {
+    _initOriginMap(containerEl);
+    clearOriginMarkers();
+
+    mappedOrigins.forEach((origin) => {
+        const isActive = origin.key === selectedOriginKey;
+        const dotSize = Math.min(22, 12 + (origin.count - 1) * 2);
+
+        const icon = L.divIcon({
+            className: `origin-marker${isActive ? " active" : ""}`,
+            html: `<span class="origin-marker-dot" style="width:${dotSize}px;height:${dotSize}px;"></span><span class="origin-marker-label">${origin.canonicalLabel}</span>`,
+            iconAnchor: [dotSize / 2, dotSize / 2],
+            iconSize: null,
+        });
+
+        const marker = L.marker([origin.point.lat, origin.point.lng], { icon }).addTo(_originMap);
+
+        if (onSelect) {
+            marker.on("click", () => onSelect(origin.key));
+        }
+
+        _originMarkers[origin.key] = marker;
+    });
 }

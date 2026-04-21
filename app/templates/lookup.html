@@ -2,6 +2,11 @@
 
 {% block title %}Lookup | Roaster Server{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
 {% block content %}
 <main class="page-grid">
     <section class="hero-grid">
@@ -48,36 +53,7 @@
                     <div class="metric-label">Browse By Origin</div>
                     <p class="helper-text" id="lookupOriginMapSummary">Click a mapped origin to filter the saved-session list.</p>
                     <div class="origin-map-card origin-map-card-compact">
-                        <svg class="origin-world-map" viewBox="0 0 1000 500" aria-label="World map of roast origins in lookup">
-                            <defs>
-                                <linearGradient id="lookupOriginOceanGradient" x1="0" x2="0" y1="0" y2="1">
-                                    <stop offset="0%" stop-color="rgba(205, 231, 232, 0.94)"></stop>
-                                    <stop offset="100%" stop-color="rgba(240, 248, 245, 0.98)"></stop>
-                                </linearGradient>
-                            </defs>
-                            <rect x="0" y="0" width="1000" height="500" rx="28" class="origin-map-ocean lookup-origin-map-ocean"></rect>
-                            <g class="origin-map-grid">
-                                <line x1="0" y1="125" x2="1000" y2="125"></line>
-                                <line x1="0" y1="250" x2="1000" y2="250"></line>
-                                <line x1="0" y1="375" x2="1000" y2="375"></line>
-                                <line x1="166" y1="0" x2="166" y2="500"></line>
-                                <line x1="333" y1="0" x2="333" y2="500"></line>
-                                <line x1="500" y1="0" x2="500" y2="500"></line>
-                                <line x1="666" y1="0" x2="666" y2="500"></line>
-                                <line x1="833" y1="0" x2="833" y2="500"></line>
-                            </g>
-                            <g class="origin-map-geography">
-                                <path class="origin-map-land" d="M82 121 C112 99, 160 86, 204 96 C246 106, 286 124, 314 150 C333 171, 341 197, 336 219 C318 243, 296 255, 268 261 C220 272, 174 276, 141 262 C111 248, 94 228, 83 201 C74 178, 74 145, 82 121 Z"></path>
-                                <path class="origin-map-land" d="M241 266 C260 274, 280 292, 291 315 C298 338, 298 366, 289 392 C279 420, 266 445, 245 467 C231 483, 214 478, 206 459 C197 440, 195 413, 199 386 C205 350, 214 315, 227 289 C231 280, 234 273, 241 266 Z"></path>
-                                <path class="origin-map-land" d="M422 117 C470 101, 520 91, 575 92 C632 92, 692 99, 742 110 C790 120, 832 134, 874 157 C893 177, 891 197, 869 208 C839 220, 802 222, 770 220 C737 220, 714 229, 691 239 C661 252, 628 257, 603 252 C575 246, 557 234, 533 223 C505 210, 479 204, 451 197 C431 189, 416 173, 410 155 C409 140, 412 127, 422 117 Z"></path>
-                                <path class="origin-map-land" d="M548 248 C570 242, 593 242, 617 251 C641 262, 658 281, 670 304 C679 326, 679 348, 673 371 C664 394, 650 416, 630 434 C609 449, 588 451, 570 438 C556 422, 547 399, 540 375 C535 344, 534 316, 537 291 C540 272, 542 256, 548 248 Z"></path>
-                                <path class="origin-map-land" d="M762 324 C785 317, 808 317, 834 327 C861 339, 885 356, 907 375 C919 391, 920 407, 906 417 C883 424, 857 426, 831 424 C808 420, 793 408, 779 392 C766 374, 758 353, 757 338 C756 331, 757 327, 762 324 Z"></path>
-                                <path class="origin-map-island" d="M356 196 C362 191, 369 190, 375 195 C377 201, 373 208, 367 210 C360 209, 356 203, 356 196 Z"></path>
-                                <path class="origin-map-island" d="M596 196 C601 191, 608 190, 613 194 C615 200, 612 206, 606 208 C600 208, 596 202, 596 196 Z"></path>
-                                <path class="origin-map-island" d="M935 344 C940 340, 946 340, 951 344 C953 349, 950 354, 945 356 C940 356, 936 351, 935 344 Z"></path>
-                            </g>
-                        </svg>
-                        <div id="lookupOriginMapMarkers" class="origin-map-markers"></div>
+                        <div id="lookupOriginWorldMap" class="origin-world-map" aria-label="World map of roast origins in lookup"></div>
                     </div>
                     <div class="inline-controls">
                         <button class="ghost" id="clearOriginFilterButton" type="button">Clear Origin Filter</button>
@@ -175,6 +151,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{{ url_for('static', filename='js/origin_map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lookup_page.js') }}"></script>
 {% endblock %}

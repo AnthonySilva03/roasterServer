@@ -56,14 +56,16 @@ Or with the helper script:
 
 - If `pigpio` is unavailable, the app automatically uses simulated data.
 - The dashboard includes a hardware health panel backed by `GET /api/sensor/health`.
-- The dashboard also plots saved roast origins on an interactive world map that matches coffee regions and countries from saved origin text.
-- The lookup page includes a compact interactive world map that filters saved sessions by mapped origin.
+- Both the dashboard and lookup page use Leaflet-based interactive origin maps via `origin_map.js`. Both pages must load `leaflet.js` before `origin_map.js` in their scripts block.
+- Adding new coffee-growing regions requires extending `coffeeOriginCatalog` in `app/static/js/origin_map.js`.
 - The SQLite database is created automatically at `instance/roasts.db`.
 - Recent roast history is loaded from `GET /api/roasts`.
 - Roast review shows the actual graph curve that will be saved before the final `POST /api/roasts`.
-- Roast setup now captures batch weight, and saved roasts persist both `weight_grams` and `total_roast_seconds`.
-- The lookup edit page now updates saved roast metadata, roast notes, rating, and tasting notes through `PATCH /api/roasts/<id>`.
-- Saved roasts can be removed from the lookup page through `DELETE /api/roasts/<id>`.
+- Roast setup captures batch weight and flame level. Saved roasts persist `weight_grams`, `total_roast_seconds`, and `flame_level`.
+- Photos are stored on disk at `instance/uploads/<uuid>.<ext>`. The API returns `photo_url` for new records and `photo_data` for legacy base64 records.
+- The lookup edit page updates saved roast metadata, roast notes, rating, and tasting notes through `PATCH /api/roasts/<id>`.
+- Saved roasts can be removed from the lookup page through `DELETE /api/roasts/<id>` (also deletes the photo file if present).
+- The `schema_version` table in SQLite drives additive migrations. Bump `_SCHEMA_VERSION` and add `_migrate_vN(conn)` when adding columns.
 - Console logging now covers startup, route hits, roast saves, feedback edits, socket controls, and periodic sensor samples for testing.
 - You can reset the local database to a known demo roast set with `./scripts/dev.sh seed-roasts`.
 
