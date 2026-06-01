@@ -96,8 +96,9 @@ function updateLookupSearchSummary(filteredItems) {
 function renderLookupOriginMap() {
     const mappedOrigins = buildMappedOrigins(lookupItems);
     if (!mappedOrigins.length) {
+        selectedOriginKey = null;
         lookupOriginMapSummaryEl.textContent = "No mapped roast origins available yet.";
-        lookupOriginMapMarkersEl.innerHTML = "";
+        renderOriginMarkers(lookupOriginWorldMapEl, [], null, null);
         clearOriginFilterButtonEl.disabled = true;
         return;
     }
