@@ -1,6 +1,6 @@
 # Continuation Notes
 
-Last updated: 2026-04-21
+Last updated: 2026-06-01
 
 ## Purpose
 
@@ -9,12 +9,12 @@ This document is a restart point for future development sessions. It summarizes 
 ## Current Priorities
 
 1. Improve the active roast workflow with richer roast analytics.
-   - Implemented: roast duration, development time, development ratio, peak temperature, batch weight, saved total roast time, flame-level tracking.
-   - Good follow-up candidates: turn-point detection, stronger graph annotations, comparative batch overlays, rate-of-rise display.
+   - Implemented: roast duration, development time, development ratio, peak temperature, batch weight, saved total roast time, flame-level tracking, rate-of-rise display (RoR overlay + stat), turn-point detection (marked on the live curve).
+   - Good follow-up candidates: stronger graph annotations, comparative batch overlays, RoR on saved-roast (review/lookup) charts.
 
 2. Improve persistence for media and roast records.
-   - Implemented: photos now stored on disk at `instance/uploads/<uuid>.<ext>` instead of base64 in SQLite. `schema_version` table drives additive migrations.
-   - Still open: export/import for roast sessions, richer tasting-history tracking.
+   - Implemented: photos now stored on disk at `instance/uploads/<uuid>.<ext>` instead of base64 in SQLite. `schema_version` table drives additive migrations. Roast export (`GET /api/roasts/<id>/export`) and import (`POST /api/roasts/import`) round-trip a portable JSON document including embedded photos.
+   - Still open: richer tasting-history tracking, batch export of all roasts, import UI on the lookup page (export link exists; import currently endpoint-only).
 
 3. Improve Raspberry Pi hardware polish.
    - Servo calibration UI, clearer diagnostics, better recovery from hardware faults are the main remaining gaps.
@@ -192,6 +192,8 @@ Current automated coverage:
 - roast create/detail/summary APIs
 - roast feedback patch API, missing-roast 404, malformed body 400
 - photo upload: valid type saves to disk, invalid type rejected, oversized rejected, DELETE removes file
+- roast export: portable payload shape, 404 for missing roast
+- roast import: export→import round-trip with fresh id, bare list, missing-field rejection, empty body rejection, no partial save on invalid entry
 - lookup edit page render
 - sensor health endpoint
 - simulated sensor behavior
@@ -201,7 +203,8 @@ Current automated coverage:
 
 Latest automated verification:
 
-- `PYTHONPATH=. pytest -q` — 35 passed on 2026-04-20
+- `PYTHONPATH=. pytest -q` — 42 passed on 2026-06-01 (added 7 export/import tests)
+- Frontend JS (RoR, turn point, toasts) is verified with `node --check`; there is no JS test harness yet.
 
 Latest local commits:
 

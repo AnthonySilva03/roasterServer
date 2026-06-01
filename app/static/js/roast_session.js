@@ -32,9 +32,11 @@ const analyticsDurationEl = document.getElementById("analyticsDuration");
 const analyticsDevelopmentEl = document.getElementById("analyticsDevelopment");
 const analyticsDevelopmentRatioEl = document.getElementById("analyticsDevelopmentRatio");
 const analyticsPeakTemperatureEl = document.getElementById("analyticsPeakTemperature");
+const analyticsRorEl = document.getElementById("analyticsRor");
 const analyticsCopyEl = document.getElementById("analyticsCopy");
 
 const roastChart = createLineChart("temperatureChart", "Temperature", "#b4542b");
+enableRorOverlay(roastChart);
 const roastCurve = [];
 const roastEvents = [];
 let roastRecording = false;
@@ -101,6 +103,12 @@ function renderAnalytics() {
         ? `${analytics.peakTemperature.toFixed(1)} °C`
         : "--";
 
+    const rorSeries = buildRorSeries(roastCurve, {
+        startedAt: roastStartedAt || preRoastAt,
+    });
+    const latestRor = rorSeries.length ? rorSeries[rorSeries.length - 1].y : null;
+    analyticsRorEl.textContent = formatRate(latestRor);
+
     if (!roastCurve.length) {
         analyticsCopyEl.textContent = "Start the roast to begin calculating analytics.";
         return;
@@ -131,6 +139,18 @@ function rebuildStageMarkers() {
             color: event.color,
         }))
         .filter((event) => Number.isFinite(event.label));
+
+    const turningPoint = detectTurningPoint(roastCurve, {
+        startedAt: roastStartedAt || preRoastAt,
+    });
+    if (turningPoint) {
+        markers.push({
+            label: turningPoint.x,
+            text: `Turn ${turningPoint.temperature.toFixed(0)}°C`,
+            color: "#9b6dff",
+        });
+    }
+
     setStageMarkers(roastChart, markers);
 }
 
@@ -170,6 +190,7 @@ function recordHardwareIssue(detail, options = {}) {
 function clearRoastGraph() {
     roastCurve.length = 0;
     setChartSeries(roastChart, []);
+    setRorSeries(roastChart, []);
     rebuildStageMarkers();
     renderAnalytics();
 }
@@ -195,6 +216,12 @@ function captureTemperature(data) {
     setChartSeries(
         roastChart,
         buildChartSeries(roastCurve, {
+            startedAt: roastStartedAt || preRoastAt,
+        })
+    );
+    setRorSeries(
+        roastChart,
+        buildRorSeries(roastCurve, {
             startedAt: roastStartedAt || preRoastAt,
         })
     );

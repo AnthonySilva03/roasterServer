@@ -165,6 +165,56 @@ function setStageBadges(chart, badges) {
     chart.update();
 }
 
+function enableRorOverlay(chart, options = {}) {
+    if (chart.data.datasets.length > 1) {
+        return chart;
+    }
+
+    const color = options.color || "#6fae53";
+    chart.data.datasets.push({
+        label: options.label || "Rate of Rise",
+        data: [],
+        borderColor: color,
+        backgroundColor: "transparent",
+        borderWidth: 2,
+        borderDash: [4, 4],
+        tension: 0.3,
+        pointRadius: 0,
+        fill: false,
+        yAxisID: "y1",
+    });
+
+    chart.options.scales.y1 = {
+        type: "linear",
+        position: "right",
+        beginAtZero: true,
+        grid: {
+            drawOnChartArea: false,
+        },
+        ticks: {
+            color: "rgba(150, 214, 130, 0.8)",
+        },
+        title: {
+            display: true,
+            text: "RoR (°C/min)",
+            color: "rgba(150, 214, 130, 0.8)",
+        },
+    };
+
+    chart.update();
+    return chart;
+}
+
+function setRorSeries(chart, points) {
+    const dataset = chart.data.datasets[1];
+    if (!dataset) {
+        return;
+    }
+
+    dataset.data = points;
+    chart.update();
+}
+
 function resolveChartBaseTime(curve = [], options = {}) {
     const anchorDate = options.anchorDate || options.startedAt || options.endedAt || null;
     const startedAt = parseRoastTimestamp(options.startedAt, anchorDate);
@@ -204,6 +254,103 @@ function buildChartSeries(curve = [], options = {}) {
             return { x, y };
         })
         .filter(Boolean);
+}
+
+function buildRorSeries(curve = [], options = {}) {
+    const anchorDate = options.anchorDate || options.startedAt || options.endedAt || null;
+    const baseTime = resolveChartBaseTime(curve, options);
+    const windowSeconds = Number.isFinite(options.windowSeconds) ? options.windowSeconds : 30;
+
+    const points = curve
+        .map((point) => {
+            const time = parseRoastTimestamp(point.timestamp, anchorDate);
+            const temperature = Number(point.temperature);
+            const x = toElapsedMinutes(point.timestamp, baseTime, anchorDate);
+            if (!time || !Number.isFinite(temperature) || !Number.isFinite(x)) {
+                return null;
+            }
+            return { time, temperature, x };
+        })
+        .filter(Boolean);
+
+    const series = [];
+    for (let i = 0; i < points.length; i += 1) {
+        const current = points[i];
+        let reference = null;
+        for (let j = i - 1; j >= 0; j -= 1) {
+            const deltaSeconds = (current.time.getTime() - points[j].time.getTime()) / 1000;
+            if (deltaSeconds > windowSeconds) {
+                break;
+            }
+            reference = points[j];
+        }
+
+        if (!reference) {
+            continue;
+        }
+
+        const deltaMinutes = (current.time.getTime() - reference.time.getTime()) / 60000;
+        if (deltaMinutes <= 0) {
+            continue;
+        }
+
+        const ror = (current.temperature - reference.temperature) / deltaMinutes;
+        series.push({ x: current.x, y: Number(ror.toFixed(2)) });
+    }
+
+    return series;
+}
+
+function detectTurningPoint(curve = [], options = {}) {
+    const anchorDate = options.anchorDate || options.startedAt || options.endedAt || null;
+    const baseTime = resolveChartBaseTime(curve, options);
+    const startTime = parseRoastTimestamp(options.startedAt, anchorDate);
+    const riseThreshold = Number.isFinite(options.riseThreshold) ? options.riseThreshold : 2;
+
+    const points = curve
+        .map((point) => {
+            const time = parseRoastTimestamp(point.timestamp, anchorDate);
+            const temperature = Number(point.temperature);
+            if (!time || !Number.isFinite(temperature)) {
+                return null;
+            }
+            if (startTime && time.getTime() < startTime.getTime()) {
+                return null;
+            }
+            return { time, temperature, timestamp: point.timestamp };
+        })
+        .filter(Boolean);
+
+    if (points.length < 3) {
+        return null;
+    }
+
+    let minIndex = 0;
+    for (let i = 1; i < points.length; i += 1) {
+        if (points[i].temperature < points[minIndex].temperature) {
+            minIndex = i;
+        }
+    }
+
+    // A real turn is the post-charge minimum, confirmed by a subsequent rise.
+    if (minIndex >= points.length - 1) {
+        return null;
+    }
+
+    const maxAfter = points
+        .slice(minIndex + 1)
+        .reduce((peak, point) => Math.max(peak, point.temperature), -Infinity);
+    if (maxAfter - points[minIndex].temperature < riseThreshold) {
+        return null;
+    }
+
+    const turn = points[minIndex];
+    const x = toElapsedMinutes(turn.timestamp, baseTime, anchorDate);
+    if (!Number.isFinite(x)) {
+        return null;
+    }
+
+    return { x, temperature: turn.temperature, timestamp: turn.timestamp };
 }
 
 function parseRoastTimestamp(value, anchorDate = null) {

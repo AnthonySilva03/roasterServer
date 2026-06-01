@@ -80,11 +80,13 @@ saveTasteFeedbackButtonEl.addEventListener("click", async () => {
     const body = await response.json();
     if (!response.ok) {
         editFeedbackMessageEl.textContent = body.error || "Unable to save cup feedback.";
+        showToast(body.error || "Unable to save cup feedback.", "error");
         return;
     }
 
     renderRoastFeedback(body);
     editFeedbackMessageEl.textContent = "Roast changes saved. Returning to lookup...";
+    showToast("Roast changes saved.", "success");
     window.setTimeout(() => {
         window.location.href = "/lookup";
     }, 900);

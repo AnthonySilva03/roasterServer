@@ -1,7 +1,7 @@
 import base64
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_from_directory, url_for
@@ -22,6 +22,10 @@ main = Blueprint("main", __name__)
 
 _ALLOWED_PHOTO_TYPES = re.compile(r'^data:image/(jpeg|jpg|png|gif|webp);base64,')
 _MAX_PHOTO_BYTES = 7_000_000  # ~5 MB raw after base64 decode
+
+
+class PhotoSaveError(Exception):
+    """Raised when a valid photo payload could not be written to disk."""
 
 
 @main.route("/")
@@ -306,9 +310,8 @@ def delete_roast(roast_id):
     return jsonify({"deleted": True, "roast_id": roast_id})
 
 
-@main.route("/api/roasts", methods=["POST"])
-def create_roast():
-    payload = request.get_json(silent=True) or {}
+def _normalize_roast_payload(payload):
+    """Validate and coerce roast fields in place. Returns an error string or None."""
     required_fields = [
         "bean_name",
         "origin",
@@ -319,10 +322,8 @@ def create_roast():
     missing = [
         field for field in required_fields if not str(payload.get(field, "")).strip()
     ]
-
     if missing:
-        current_app.logger.warning("Rejected roast create request due to missing fields", extra={"missing_fields": ", ".join(missing)})
-        return jsonify({"error": f"Missing fields: {', '.join(missing)}"}), 400
+        return f"Missing fields: {', '.join(missing)}"
 
     weight_grams = payload.get("weight_grams")
     if weight_grams in ("", None):
@@ -331,7 +332,7 @@ def create_roast():
         try:
             payload["weight_grams"] = round(float(weight_grams), 2)
         except (TypeError, ValueError):
-            return jsonify({"error": "Weight must be a valid number in grams."}), 400
+            return "Weight must be a valid number in grams."
 
     total_roast_seconds = payload.get("total_roast_seconds")
     if total_roast_seconds in ("", None):
@@ -340,7 +341,7 @@ def create_roast():
         try:
             payload["total_roast_seconds"] = int(total_roast_seconds)
         except (TypeError, ValueError):
-            return jsonify({"error": "Total roast time must be a whole number of seconds."}), 400
+            return "Total roast time must be a whole number of seconds."
 
     flame_level = payload.get("flame_level")
     if flame_level in ("", None):
@@ -349,10 +350,21 @@ def create_roast():
         try:
             payload["flame_level"] = int(flame_level)
         except (TypeError, ValueError):
-            return jsonify({"error": "Flame level must be a whole number from 0 to 100."}), 400
+            return "Flame level must be a whole number from 0 to 100."
 
         if payload["flame_level"] < 0 or payload["flame_level"] > 100:
-            return jsonify({"error": "Flame level must be between 0 and 100."}), 400
+            return "Flame level must be between 0 and 100."
+
+    return None
+
+
+@main.route("/api/roasts", methods=["POST"])
+def create_roast():
+    payload = request.get_json(silent=True) or {}
+    error = _normalize_roast_payload(payload)
+    if error:
+        current_app.logger.warning("Rejected roast create request", extra={"error": error})
+        return jsonify({"error": error}), 400
 
     photo_data = str(payload.pop("photo_data", "") or "")
     if photo_data:
@@ -361,9 +373,12 @@ def create_roast():
         if len(photo_data) > _MAX_PHOTO_BYTES:
             return jsonify({"error": "Photo exceeds the 5 MB size limit."}), 400
 
-    payload["photo_filename"] = _save_photo_to_disk(photo_data)
+    try:
+        payload["photo_filename"] = _save_photo_to_disk(photo_data)
+    except PhotoSaveError:
+        return jsonify({"error": "Could not save the uploaded photo. Please try again."}), 500
 
-    payload["created_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    payload["created_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
     roast = save_roast_session(payload)
     current_app.logger.info(
         "Created roast session",
@@ -381,6 +396,137 @@ def create_roast():
     return jsonify(roast), 201
 
 
+_EXPORT_FORMAT = "roaster-server-roast"
+_EXPORT_FIELDS = [
+    "bean_name",
+    "origin",
+    "roast_level",
+    "weight_grams",
+    "flame_level",
+    "total_roast_seconds",
+    "notes",
+    "taste_notes",
+    "rating",
+    "started_at",
+    "ended_at",
+    "created_at",
+    "curve",
+    "events",
+]
+
+
+@main.route("/api/roasts/<int:roast_id>/export", methods=["GET"])
+def export_roast(roast_id):
+    roast = get_roast_session(roast_id)
+    if roast is None:
+        current_app.logger.warning("Requested export for missing roast", extra={"roast_id": roast_id})
+        abort(404)
+
+    data = {field: roast.get(field) for field in _EXPORT_FIELDS}
+    photo_data = _photo_as_data_url(roast)
+    if photo_data:
+        data["photo_data"] = photo_data
+
+    response = jsonify({"format": _EXPORT_FORMAT, "version": 1, "roast": data})
+    response.headers["Content-Disposition"] = f'attachment; filename="{_export_filename(roast)}"'
+    current_app.logger.info("Exported roast session", extra={"roast_id": roast_id, "has_photo": bool(photo_data)})
+    return response
+
+
+@main.route("/api/roasts/import", methods=["POST"])
+def import_roasts():
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({"error": "Request body must be valid JSON."}), 400
+
+    entries = _extract_import_roasts(payload)
+    if not entries:
+        return jsonify({"error": "Could not find any roast records to import."}), 400
+
+    # Validate every entry up front so a bad record never leaves a partial import.
+    normalized = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            return jsonify({"error": "Each roast must be a JSON object."}), 400
+
+        roast_payload = dict(entry)
+        roast_payload.pop("id", None)  # storage assigns a fresh id
+
+        error = _normalize_roast_payload(roast_payload)
+        if error:
+            return jsonify({"error": error}), 400
+
+        photo_data = str(roast_payload.pop("photo_data", "") or "")
+        if photo_data:
+            if not _ALLOWED_PHOTO_TYPES.match(photo_data):
+                return jsonify({"error": "Photo must be a JPEG, PNG, GIF, or WebP image."}), 400
+            if len(photo_data) > _MAX_PHOTO_BYTES:
+                return jsonify({"error": "Photo exceeds the 5 MB size limit."}), 400
+
+        normalized.append((roast_payload, photo_data))
+
+    imported = []
+    for roast_payload, photo_data in normalized:
+        try:
+            roast_payload["photo_filename"] = _save_photo_to_disk(photo_data)
+        except PhotoSaveError:
+            return jsonify({"error": "Could not save an imported photo. Please try again."}), 500
+
+        if not str(roast_payload.get("created_at", "")).strip():
+            roast_payload["created_at"] = (
+                datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
+            )
+
+        imported.append(save_roast_session(roast_payload))
+
+    current_app.logger.info("Imported roast sessions", extra={"count": len(imported)})
+    return jsonify({"imported": len(imported), "items": imported}), 201
+
+
+def _extract_import_roasts(payload):
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        if isinstance(payload.get("roast"), dict):
+            return [payload["roast"]]
+        if isinstance(payload.get("roasts"), list):
+            return payload["roasts"]
+        if isinstance(payload.get("items"), list):
+            return payload["items"]
+        if any(key in payload for key in ("bean_name", "curve", "events")):
+            return [payload]
+    return None
+
+
+def _photo_as_data_url(roast):
+    legacy = roast.get("photo_data") or ""
+    if legacy:
+        return legacy
+
+    filename = roast.get("photo_filename") or ""
+    if not filename:
+        return ""
+
+    upload_folder = current_app.config.get("UPLOAD_FOLDER", "")
+    if not upload_folder:
+        return ""
+
+    try:
+        raw = Path(upload_folder, filename).read_bytes()
+    except OSError:
+        current_app.logger.warning("Could not read photo for export", extra={"photo_filename": filename})
+        return ""
+
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+    mime = "jpeg" if ext == "jpg" else ext
+    return f"data:image/{mime};base64,{base64.b64encode(raw).decode()}"
+
+
+def _export_filename(roast):
+    slug = re.sub(r'[^\w\-]+', '-', (roast.get("bean_name") or "roast")).strip("-").lower() or "roast"
+    return f"roast-{roast['id']}-{slug}.json"
+
+
 def _require_wifi_setup_mode():
     if not wifi_service.is_setup_mode_enabled(current_app):
         abort(404)
@@ -392,7 +538,8 @@ def _save_photo_to_disk(photo_data):
 
     upload_folder = current_app.config.get("UPLOAD_FOLDER", "")
     if not upload_folder:
-        return ""
+        current_app.logger.error("Photo upload received but UPLOAD_FOLDER is not configured")
+        raise PhotoSaveError("upload folder not configured")
 
     try:
         header, encoded = photo_data.split(",", 1)
@@ -403,9 +550,9 @@ def _save_photo_to_disk(photo_data):
         filename = f"{uuid.uuid4().hex}.{ext}"
         Path(upload_folder, filename).write_bytes(base64.b64decode(encoded))
         return filename
-    except Exception:
+    except Exception as error:
         current_app.logger.exception("Failed to save photo to disk")
-        return ""
+        raise PhotoSaveError(str(error)) from error
 
 
 @main.route("/api/sensor/health", methods=["GET"])

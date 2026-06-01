@@ -30,6 +30,9 @@
         {% block content %}{% endblock %}
     </div>
 
+    <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="false"></div>
+
+    <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script src="{{ url_for('static', filename='js/live_charts.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>

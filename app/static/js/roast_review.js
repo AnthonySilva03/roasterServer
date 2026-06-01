@@ -142,6 +142,7 @@ photoInputEl.addEventListener("change", () => {
 saveRoastButtonEl.addEventListener("click", async () => {
     if (!pendingRoast) {
         reviewMessageEl.textContent = "No roast is waiting to be saved.";
+        showToast("No roast is waiting to be saved.", "error");
         return;
     }
 
@@ -156,11 +157,13 @@ saveRoastButtonEl.addEventListener("click", async () => {
     const body = await response.json();
     if (!response.ok) {
         reviewMessageEl.textContent = body.error || "Unable to save roast.";
+        showToast(body.error || "Unable to save roast.", "error");
         return;
     }
 
     sessionStorage.removeItem("pendingRoastReview");
     reviewMessageEl.textContent = `Roast saved as #${body.id}. Redirecting to lookup...`;
+    showToast(`Roast saved as #${body.id}.`, "success");
     window.setTimeout(() => {
         window.location.href = "/lookup";
     }, 800);

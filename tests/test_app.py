@@ -545,3 +545,103 @@ def test_update_roast_feedback_rejects_invalid_rating(client):
 
     assert response.status_code == 400
     assert "Rating must be between 1 and 5." == response.get_json()["error"]
+
+
+def _create_sample_roast(client, **overrides):
+    payload = {
+        "bean_name": "Export Roast",
+        "origin": "Ethiopia",
+        "roast_level": "Light",
+        "weight_grams": 300,
+        "flame_level": 55,
+        "total_roast_seconds": 600,
+        "started_at": "2026-04-15T12:00:00Z",
+        "ended_at": "2026-04-15T12:10:00Z",
+        "notes": "Export verification",
+        "curve": [{"timestamp": "12:00:05", "temperature": 200.0, "flame_level": 55}],
+        "events": [{
+            "label": "First Crack",
+            "detail": "Marked",
+            "time": "2026-04-15T12:07:00Z",
+            "chart_label": "12:07:00",
+            "color": "#d4a246",
+            "temperature": 196.0,
+            "flame_level": 55,
+        }],
+    }
+    payload.update(overrides)
+    response = client.post("/api/roasts", json=payload)
+    assert response.status_code == 201
+    return response.get_json()
+
+
+def test_export_roast_returns_portable_payload(client):
+    roast = _create_sample_roast(client)
+
+    response = client.get(f"/api/roasts/{roast['id']}/export")
+    assert response.status_code == 200
+    assert "attachment" in response.headers.get("Content-Disposition", "")
+
+    body = response.get_json()
+    assert body["format"] == "roaster-server-roast"
+    assert body["version"] == 1
+    exported = body["roast"]
+    assert exported["bean_name"] == "Export Roast"
+    assert exported["origin"] == "Ethiopia"
+    assert len(exported["curve"]) == 1
+    assert len(exported["events"]) == 1
+    # internal-only fields must not leak into the portable payload
+    assert "id" not in exported
+    assert "photo_filename" not in exported
+
+
+def test_export_missing_roast_returns_404(client):
+    response = client.get("/api/roasts/99999/export")
+    assert response.status_code == 404
+
+
+def test_export_then_import_round_trips(client):
+    roast = _create_sample_roast(client, bean_name="Round Trip Roast")
+    export_body = client.get(f"/api/roasts/{roast['id']}/export").get_json()
+
+    import_response = client.post("/api/roasts/import", json=export_body)
+    assert import_response.status_code == 201
+    result = import_response.get_json()
+    assert result["imported"] == 1
+
+    imported = result["items"][0]
+    assert imported["id"] != roast["id"]  # storage assigns a fresh id
+    assert imported["bean_name"] == "Round Trip Roast"
+    assert len(imported["curve"]) == 1
+    assert len(imported["events"]) == 1
+
+
+def test_import_accepts_bare_list_of_roasts(client):
+    roast_a = client.get(f"/api/roasts/{_create_sample_roast(client, bean_name='A')['id']}/export").get_json()["roast"]
+    roast_b = client.get(f"/api/roasts/{_create_sample_roast(client, bean_name='B')['id']}/export").get_json()["roast"]
+
+    response = client.post("/api/roasts/import", json=[roast_a, roast_b])
+    assert response.status_code == 201
+    assert response.get_json()["imported"] == 2
+
+
+def test_import_rejects_missing_required_fields(client):
+    response = client.post("/api/roasts/import", json={"roast": {"bean_name": "Incomplete"}})
+    assert response.status_code == 400
+    assert "Missing fields" in response.get_json()["error"]
+
+
+def test_import_rejects_empty_body(client):
+    response = client.post("/api/roasts/import", json={})
+    assert response.status_code == 400
+
+
+def test_import_does_not_partially_save_on_invalid_entry(client):
+    good = client.get(f"/api/roasts/{_create_sample_roast(client, bean_name='Good')['id']}/export").get_json()["roast"]
+    before = len(client.get("/api/roasts?limit=all").get_json()["items"])
+
+    response = client.post("/api/roasts/import", json=[good, {"bean_name": "Broken"}])
+    assert response.status_code == 400
+
+    after = len(client.get("/api/roasts?limit=all").get_json()["items"])
+    assert after == before  # the valid entry must not be saved when a later entry fails

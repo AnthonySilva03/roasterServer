@@ -60,6 +60,12 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Security** — The app raises `RuntimeError` at startup if `SECRET_KEY == "devkey"` outside test mode. Photo uploads are validated for MIME type (jpeg/png/gif/webp) and raw size (≤ 5 MB / 7 MB base64) in routes.py.
 
+**Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before saving any (no partial imports), drops incoming `id`s, and assigns fresh ones. `create_roast` and `import_roasts` share `_normalize_roast_payload` for field coercion/validation.
+
+**Rate-of-rise & turn point** — Client-side only, in `live_charts.js`. `buildRorSeries(curve, {windowSeconds})` returns smoothed RoR points; `enableRorOverlay(chart)` adds a second dataset on the right-hand `y1` axis (temperature stays dataset 0 so `stageMarkerPlugin` is unaffected). `detectTurningPoint(curve, {startedAt, riseThreshold})` returns the confirmed post-charge minimum, drawn as a stage marker by `rebuildStageMarkers` in `roast_session.js`. No server storage — these are derived from the saved curve.
+
+**Toasts** — `toast.js` exposes a global `showToast(message, type)` (`success`/`error`/`info`); it's loaded in `base.html` before `live_charts.js` and renders into `#toastRegion`. Used alongside (not replacing) existing inline messages for save/delete/edit outcomes.
+
 ## Environment Variables
 
 | Variable | Default | Notes |
@@ -78,13 +84,15 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 ## API Surface
 
 ```
-GET  /api/roasts           list saved roasts
-POST /api/roasts           save roast + curve + photo
-GET  /api/roasts/<id>      roast detail with curve + events
-PATCH /api/roasts/<id>     update metadata, notes, rating, tasting notes
-DELETE /api/roasts/<id>    remove roast + photo file
-GET  /api/sensor/health    hardware health check
-GET  /uploads/<filename>   serve saved photo files
+GET  /api/roasts                list saved roasts
+POST /api/roasts                save roast + curve + photo
+GET  /api/roasts/<id>           roast detail with curve + events
+PATCH /api/roasts/<id>          update metadata, notes, rating, tasting notes
+DELETE /api/roasts/<id>         remove roast + photo file
+GET  /api/roasts/<id>/export    download a single roast as portable JSON
+POST /api/roasts/import         restore one or many roasts from exported JSON
+GET  /api/sensor/health         hardware health check
+GET  /uploads/<filename>        serve saved photo files
 ```
 
 ## Test Suite
@@ -93,7 +101,7 @@ GET  /uploads/<filename>   serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 35 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+All tests use an in-memory SQLite DB and disable the background sensor task. 42 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
 
 ## Common Gotchas
 

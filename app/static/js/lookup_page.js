@@ -28,6 +28,7 @@ const detailEventsEl = document.getElementById("detailEvents");
 const detailPhotoWrapEl = document.getElementById("detailPhotoWrap");
 const detailPhotoEl = document.getElementById("detailPhoto");
 const editRoastLinkEl = document.getElementById("editRoastLink");
+const exportRoastLinkEl = document.getElementById("exportRoastLink");
 const removeRoastButtonEl = document.getElementById("removeRoastButton");
 
 const lookupTemperatureChart = createLineChart(
@@ -259,6 +260,10 @@ function setLookupDetail(roast) {
         : "First crack was not marked for this roast, so development metrics are incomplete.";
     detailNotesEl.textContent = roast.notes || "No notes recorded.";
     editRoastLinkEl.href = `/lookup/${roast.id}/edit`;
+    if (exportRoastLinkEl) {
+        exportRoastLinkEl.href = `/api/roasts/${roast.id}/export`;
+        exportRoastLinkEl.style.display = "";
+    }
     removeRoastButtonEl.disabled = false;
     removeRoastButtonEl.dataset.roastId = String(roast.id);
     removeRoastButtonEl.dataset.roastName = roast.bean_name || `Roast #${roast.id}`;
@@ -311,6 +316,10 @@ function clearLookupDetail(copy) {
     detailAnalyticsCopyEl.textContent = "Select a saved roast to restore analytics and chart detail.";
     detailNotesEl.textContent = "No roast selected.";
     editRoastLinkEl.href = "/lookup";
+    if (exportRoastLinkEl) {
+        exportRoastLinkEl.href = "/lookup";
+        exportRoastLinkEl.style.display = "none";
+    }
     removeRoastButtonEl.disabled = true;
     delete removeRoastButtonEl.dataset.roastId;
     delete removeRoastButtonEl.dataset.roastName;
@@ -392,12 +401,14 @@ async function deleteSelectedRoast() {
     if (!response.ok) {
         removeRoastButtonEl.disabled = false;
         detailCopyEl.textContent = `Unable to remove ${roastName} right now.`;
+        showToast(`Unable to remove ${roastName} right now.`, "error");
         return;
     }
 
     lookupItems = lookupItems.filter((item) => item.id !== roastId);
     selectedRoastId = null;
     renderLookupView();
+    showToast(`Removed ${roastName}.`, "success");
 
     const summaryResponse = await fetch("/api/roasts/summary");
     if (summaryResponse.ok) {
