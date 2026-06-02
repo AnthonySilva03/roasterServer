@@ -66,6 +66,8 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Toasts** — `toast.js` exposes a global `showToast(message, type)` (`success`/`error`/`info`); it's loaded in `base.html` before `live_charts.js` and renders into `#toastRegion`. Used alongside (not replacing) existing inline messages for save/delete/edit outcomes.
 
+**PWA / offline** — The app is an installable, offline-capable PWA so it works on the Pi's internet-less direct-AP network. Third-party libs (Chart.js, Socket.IO, Leaflet + images) are **vendored** in `app/static/vendor/` — never re-add CDN `<script>`/`<link>` tags. `app/static/sw.js` is the service worker, served from root via the `/sw.js` route (with `Service-Worker-Allowed: /`) and registered in `base.html`; it precaches the app shell, is network-first for navigations and `/api/roasts*` (cache fallback), and **network-only** for Socket.IO and `/api/sensor/health`. Bump `CACHE_VERSION` in `sw.js` when precached assets change. `manifest.webmanifest` + `app/static/icons/` make it installable (`.webmanifest` MIME type registered in `app/__init__.py`). Map tiles (cartocdn) are the one remaining online-only resource and degrade to a dark background offline. The roast session keeps a screen Wake Lock while recording, fires `notifyRoast()` alerts (turn point / RoR crash / hardware issue), and persists an in-progress roast draft + the pending-review payload to `localStorage` so they survive a tab close/crash.
+
 ## Environment Variables
 
 | Variable | Default | Notes |
@@ -101,7 +103,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 42 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+All tests use an in-memory SQLite DB and disable the background sensor task. 48 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
 
 ## Common Gotchas
 

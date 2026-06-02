@@ -123,6 +123,15 @@ From your phone:
 2. The roaster app should open automatically (captive portal). If it doesn't, open `http://10.42.0.1`
 3. Use the dashboard, roast session, and lookup pages normally
 
+### Install it as an app (PWA)
+
+The web app is an installable, offline-capable PWA, so it behaves like a native
+app on the roaster network (which has no internet):
+
+- **Install:** in the browser menu choose "Add to Home Screen" / "Install app". It then launches full-screen with its own icon.
+- **Offline:** third-party libraries are vendored locally and a service worker precaches the app shell, so the UI and saved roasts work without internet. Only the world map tiles need internet and degrade to a dark background.
+- **During a roast:** the screen stays awake (Wake Lock) and you get notifications for the turn point, an RoR crash, or hardware issues. An in-progress roast is saved to the browser, so a tab close/crash can be resumed.
+
 > **⚠️ Single-radio lockout warning.** A Raspberry Pi's built-in Wi-Fi has one
 > radio. Switching `wlan0` into AP mode **disconnects the Pi from any home Wi-Fi
 > on that interface** — including an SSH session you opened over it. Activate

@@ -203,7 +203,7 @@ Current automated coverage:
 
 Latest automated verification:
 
-- `PYTHONPATH=. pytest -q` — 42 passed on 2026-06-01 (added 7 export/import tests)
+- `PYTHONPATH=. pytest -q` — 48 passed on 2026-06-01 (export/import + PWA manifest/service-worker tests)
 - Frontend JS (RoR, turn point, toasts) is verified with `node --check`; there is no JS test harness yet.
 
 Latest local commits:
