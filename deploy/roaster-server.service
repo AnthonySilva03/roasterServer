@@ -1,7 +1,10 @@
 [Unit]
-Description=Roaster Server Wi-Fi Provisioning App
-After=network-online.target NetworkManager.service pigpiod.service
-Wants=network-online.target
+Description=Roaster Server (direct Wi-Fi AP + app)
+# Needs NetworkManager to bring up the access point. We intentionally do NOT
+# wait for network-online.target: in direct-ap mode there is no upstream
+# network, so waiting for it would just delay boot.
+After=NetworkManager.service pigpiod.service
+Wants=NetworkManager.service
 
 [Service]
 Type=simple
@@ -10,6 +13,9 @@ Group=pi
 WorkingDirectory=/home/pi/roasterServer
 EnvironmentFile=/home/pi/roasterServer/deploy/roaster-server.env
 ExecStart=/home/pi/roasterServer/scripts/wifi_provisioning_bootstrap.sh
+# Allow binding the privileged port 80 (PORT=80 in the env) while running as pi.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 Restart=always
 RestartSec=5
 

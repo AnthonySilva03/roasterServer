@@ -127,6 +127,25 @@ def wifi_setup_page():
     )
 
 
+# Probe URLs that phones/laptops request right after joining a Wi-Fi network to
+# detect a captive portal. When the Pi runs as a direct access point we answer
+# these with a redirect to the dashboard so the device pops the app on join.
+@main.route("/generate_204")
+@main.route("/gen_204")
+@main.route("/hotspot-detect.html")
+@main.route("/library/test/success.html")
+@main.route("/ncsi.txt")
+@main.route("/connecttest.txt")
+@main.route("/canonical.html")
+@main.route("/success.txt")
+@main.route("/redirect")
+def captive_portal_probe():
+    if not current_app.config.get("CAPTIVE_PORTAL_ENABLED", False):
+        abort(404)
+    current_app.logger.info("Captive portal probe redirected", extra={"path": request.path})
+    return redirect(url_for("main.dashboard"))
+
+
 @main.route("/uploads/<filename>")
 def uploaded_file(filename):
     upload_folder = current_app.config.get("UPLOAD_FOLDER", "")

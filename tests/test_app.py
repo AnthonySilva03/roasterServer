@@ -645,3 +645,31 @@ def test_import_does_not_partially_save_on_invalid_entry(client):
 
     after = len(client.get("/api/roasts?limit=all").get_json()["items"])
     assert after == before  # the valid entry must not be saved when a later entry fails
+
+
+def test_captive_probe_returns_404_when_disabled(client):
+    # Captive portal is off by default, so probes behave like any unknown path.
+    response = client.get("/generate_204")
+    assert response.status_code == 404
+
+
+def test_captive_probe_redirects_to_dashboard_when_enabled(tmp_path):
+    from app import create_app
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "START_SENSOR_BACKGROUND_TASK": False,
+            "SENSOR_MODE": "simulated",
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///test_roasts.db",
+            "INSTANCE_PATH": str(tmp_path),
+            "CAPTIVE_PORTAL_ENABLED": True,
+        }
+    )
+    app.instance_path = str(tmp_path)
+    client = app.test_client()
+
+    for probe in ["/generate_204", "/hotspot-detect.html", "/ncsi.txt"]:
+        response = client.get(probe)
+        assert response.status_code == 302
+        assert response.headers["Location"].endswith("/")

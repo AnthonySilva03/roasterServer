@@ -9,6 +9,9 @@ SERVICE_PATH="$SYSTEMD_DIR/$SERVICE_NAME"
 ENV_TEMPLATE="$INSTALL_ROOT/deploy/roaster-server.env.example"
 ENV_PATH="$INSTALL_ROOT/deploy/roaster-server.env"
 UNIT_TEMPLATE="$INSTALL_ROOT/deploy/roaster-server.service"
+DNSMASQ_TEMPLATE="$INSTALL_ROOT/deploy/dnsmasq-shared-roaster.conf"
+DNSMASQ_DIR="/etc/NetworkManager/dnsmasq-shared.d"
+DNSMASQ_PATH="$DNSMASQ_DIR/roaster-captive.conf"
 
 if [ ! -f "$UNIT_TEMPLATE" ]; then
     echo "Missing service template: $UNIT_TEMPLATE" >&2
@@ -21,6 +24,14 @@ if [ ! -f "$ENV_PATH" ]; then
 fi
 
 install -m 644 "$UNIT_TEMPLATE" "$SERVICE_PATH"
+
+# Captive-portal DNS hijack for direct-ap mode (resolves all names to the Pi).
+if [ -f "$DNSMASQ_TEMPLATE" ]; then
+    mkdir -p "$DNSMASQ_DIR"
+    install -m 644 "$DNSMASQ_TEMPLATE" "$DNSMASQ_PATH"
+    echo "Installed captive-portal DNS config to $DNSMASQ_PATH"
+fi
+
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 

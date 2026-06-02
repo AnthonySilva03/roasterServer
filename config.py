@@ -32,3 +32,6 @@ class Config:
     WIFI_SETUP_ROUTE = os.environ.get("WIFI_SETUP_ROUTE", "/setup/wifi")
     WIFI_NMCLI_BINARY = os.environ.get("WIFI_NMCLI_BINARY", "nmcli")
     WIFI_USE_SUDO_FOR_NMCLI = os.environ.get("WIFI_USE_SUDO_FOR_NMCLI", "false").lower() == "true"
+    # When the Pi runs as a direct access point, redirect captive-portal probe
+    # requests to the dashboard so a phone auto-opens the app on join.
+    CAPTIVE_PORTAL_ENABLED = os.environ.get("CAPTIVE_PORTAL_ENABLED", "false").lower() == "true"
