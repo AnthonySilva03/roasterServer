@@ -121,6 +121,88 @@ function notifyRoast(title, body, type = "info") {
     }
 }
 
+// --- In-progress roast persistence (survives tab close / crash) ---
+const ROAST_DRAFT_KEY = "roastDraft";
+
+function saveRoastDraft() {
+    if (!roastRecording || roastFinished) {
+        return;
+    }
+    try {
+        localStorage.setItem(ROAST_DRAFT_KEY, JSON.stringify({
+            version: 1,
+            savedAt: currentTimestamp(),
+            beanName,
+            origin,
+            roastLevel,
+            weightGrams: roastWeightGrams,
+            curve: roastCurve,
+            events: roastEvents,
+            preRoastAt,
+            roastStartedAt,
+            explicitPreRoast,
+        }));
+    } catch (error) {
+        // localStorage may be unavailable or full; the roast still runs live.
+    }
+}
+
+function clearRoastDraft() {
+    try {
+        localStorage.removeItem(ROAST_DRAFT_KEY);
+    } catch (error) {
+        // ignore
+    }
+}
+
+function restoreRoastDraft(draft) {
+    roastCurve.length = 0;
+    (draft.curve || []).forEach((point) => roastCurve.push(point));
+    roastEvents.length = 0;
+    (draft.events || []).forEach((event) => roastEvents.push(event));
+    preRoastAt = draft.preRoastAt || null;
+    roastStartedAt = draft.roastStartedAt || null;
+    explicitPreRoast = Boolean(draft.explicitPreRoast);
+    roastFinished = false;
+    roastRecording = true;
+
+    renderEvents();
+    setChartSeries(roastChart, buildChartSeries(roastCurve, { startedAt: roastStartedAt || preRoastAt }));
+    setRorSeries(roastChart, buildRorSeries(roastCurve, { startedAt: roastStartedAt || preRoastAt }));
+    rebuildStageMarkers();
+    renderAnalytics();
+
+    acquireWakeLock();
+    ensureNotificationPermission();
+    roastSessionSocket.emit("control", { command: "start" });
+    sessionMessageEl.textContent = "Resumed your in-progress roast. Continue, or mark Finish to review.";
+}
+
+function maybeOfferDraftResume() {
+    let draft = null;
+    try {
+        const raw = localStorage.getItem(ROAST_DRAFT_KEY);
+        draft = raw ? JSON.parse(raw) : null;
+    } catch (error) {
+        draft = null;
+    }
+
+    if (!draft || !Array.isArray(draft.curve) || !draft.curve.length) {
+        return;
+    }
+
+    const when = new Date(draft.savedAt);
+    const label = Number.isNaN(when.getTime()) ? "earlier" : when.toLocaleString();
+    const resume = window.confirm(
+        `Resume your in-progress roast of ${draft.beanName || "a roast"} from ${label}? Choose Cancel to discard it.`
+    );
+    if (resume) {
+        restoreRoastDraft(draft);
+    } else {
+        clearRoastDraft();
+    }
+}
+
 function renderEvents() {
     if (!roastEvents.length) {
         eventLogEl.innerHTML = '<div class="empty-state">No roast events marked yet.</div>';
@@ -229,6 +311,7 @@ function addEvent(label, detail, options = {}) {
     roastEvents.push(event);
     renderEvents();
     rebuildStageMarkers();
+    saveRoastDraft();
 }
 
 function recordHardwareIssue(detail, options = {}) {
@@ -288,6 +371,7 @@ function captureTemperature(data) {
     );
     rebuildStageMarkers();
     renderAnalytics();
+    saveRoastDraft();
 }
 
 function beginRecording(fromPreRoast) {
@@ -355,7 +439,9 @@ function buildPendingRoastPayload() {
 }
 
 function goToReview() {
-    sessionStorage.setItem("pendingRoastReview", JSON.stringify(buildPendingRoastPayload()));
+    // localStorage (not sessionStorage) so the review survives a tab close.
+    localStorage.setItem("pendingRoastReview", JSON.stringify(buildPendingRoastPayload()));
+    clearRoastDraft();
     window.location.href = "/roast/review";
 }
 
@@ -528,6 +614,7 @@ finishRoastButtonEl.addEventListener("click", () => {
 
 renderEvents();
 renderAnalytics();
+maybeOfferDraftResume();
 loadRoastHardwareHealth().catch(() => {
     roastHealthSummaryEl.textContent = "Unable to fetch hardware health right now.";
     roastHardwareErrorEl.textContent = "Health endpoint unavailable.";

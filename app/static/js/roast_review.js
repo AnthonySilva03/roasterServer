@@ -118,7 +118,7 @@ function renderPendingRoast() {
 }
 
 function loadPendingRoast() {
-    const raw = sessionStorage.getItem("pendingRoastReview");
+    const raw = localStorage.getItem("pendingRoastReview");
     pendingRoast = raw ? JSON.parse(raw) : null;
     renderPendingRoast();
 }
@@ -134,7 +134,7 @@ photoInputEl.addEventListener("change", () => {
         pendingRoast.photo_data = String(reader.result || "");
         photoPreviewEl.src = pendingRoast.photo_data;
         photoPreviewWrapEl.style.display = "block";
-        sessionStorage.setItem("pendingRoastReview", JSON.stringify(pendingRoast));
+        localStorage.setItem("pendingRoastReview", JSON.stringify(pendingRoast));
     };
     reader.readAsDataURL(file);
 });
@@ -161,7 +161,7 @@ saveRoastButtonEl.addEventListener("click", async () => {
         return;
     }
 
-    sessionStorage.removeItem("pendingRoastReview");
+    localStorage.removeItem("pendingRoastReview");
     reviewMessageEl.textContent = `Roast saved as #${body.id}. Redirecting to lookup...`;
     showToast(`Roast saved as #${body.id}.`, "success");
     window.setTimeout(() => {
@@ -170,7 +170,7 @@ saveRoastButtonEl.addEventListener("click", async () => {
 });
 
 cancelRoastButtonEl.addEventListener("click", () => {
-    sessionStorage.removeItem("pendingRoastReview");
+    localStorage.removeItem("pendingRoastReview");
     window.location.href = "/";
 });
 
