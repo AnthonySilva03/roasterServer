@@ -1,6 +1,6 @@
 // Roaster Server service worker.
 // Bump CACHE_VERSION whenever precached assets change to invalidate old caches.
-const CACHE_VERSION = "roaster-v1";
+const CACHE_VERSION = "roaster-v2";
 const PRECACHE = `${CACHE_VERSION}-precache`;
 const RUNTIME = `${CACHE_VERSION}-runtime`;
 
@@ -78,8 +78,25 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
-    // Saved-roast API is handled in a later milestone; pass through for now.
+    // Saved-roast API: network-first so live data wins, fall back to the last
+    // cached copy when offline. Exports are downloads, so leave them network-only.
     if (url.pathname.startsWith("/api/")) {
+        if (url.pathname.includes("/export")) {
+            return;
+        }
+        event.respondWith((async () => {
+            const cache = await caches.open(RUNTIME);
+            try {
+                const response = await fetch(request);
+                if (response && response.ok) {
+                    cache.put(request, response.clone());
+                }
+                return response;
+            } catch (error) {
+                const cached = await cache.match(request);
+                return cached || Response.error();
+            }
+        })());
         return;
     }
 
