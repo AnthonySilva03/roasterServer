@@ -48,6 +48,9 @@ let explicitPreRoast = false;
 let lastHardwareIssueKey = null;
 let hardwareHealthPollId = null;
 let lastLoggedFlameLevel = Number(flameControlEl.value);
+let screenWakeLock = null;
+let turnPointAlerted = false;
+let rorCrashAlerted = false;
 
 function formatNow() {
     return new Date().toLocaleTimeString([], {
@@ -69,6 +72,53 @@ function currentTimestamp() {
 
 function currentFlameLevel() {
     return Number(flameControlEl.value);
+}
+
+async function acquireWakeLock() {
+    if (!("wakeLock" in navigator)) {
+        return;
+    }
+    try {
+        screenWakeLock = await navigator.wakeLock.request("screen");
+        screenWakeLock.addEventListener("release", () => {
+            screenWakeLock = null;
+        });
+    } catch (error) {
+        // Wake lock can be denied (e.g. low battery); the roast still runs.
+        screenWakeLock = null;
+    }
+}
+
+function releaseWakeLock() {
+    if (screenWakeLock) {
+        screenWakeLock.release().catch(() => {});
+        screenWakeLock = null;
+    }
+}
+
+function ensureNotificationPermission() {
+    if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+    }
+}
+
+// Alert the roaster about an automatic event. Uses a system notification when
+// the page is backgrounded, and always mirrors it as an in-page toast.
+function notifyRoast(title, body, type = "info") {
+    if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+        try {
+            new Notification(title, {
+                body,
+                icon: "/static/icons/icon-192.png",
+                tag: "roaster-event",
+            });
+        } catch (error) {
+            // fall through to the toast
+        }
+    }
+    if (typeof showToast === "function") {
+        showToast(body ? `${title} — ${body}` : title, type);
+    }
 }
 
 function renderEvents() {
@@ -108,6 +158,12 @@ function renderAnalytics() {
     });
     const latestRor = rorSeries.length ? rorSeries[rorSeries.length - 1].y : null;
     analyticsRorEl.textContent = formatRate(latestRor);
+
+    const firstCrackMarked = roastEvents.some((event) => event.label === "First Crack");
+    if (firstCrackMarked && latestRor !== null && latestRor < 0 && !rorCrashAlerted) {
+        rorCrashAlerted = true;
+        notifyRoast("Rate of rise crashed", "RoR dropped below zero after first crack.", "error");
+    }
 
     if (!roastCurve.length) {
         analyticsCopyEl.textContent = "Start the roast to begin calculating analytics.";
@@ -149,6 +205,10 @@ function rebuildStageMarkers() {
             text: `Turn ${turningPoint.temperature.toFixed(0)}°C`,
             color: "#9b6dff",
         });
+        if (!turnPointAlerted) {
+            turnPointAlerted = true;
+            notifyRoast("Turn point reached", `${turningPoint.temperature.toFixed(0)} °C — temperature is climbing again.`);
+        }
     }
 
     setStageMarkers(roastChart, markers);
@@ -185,6 +245,7 @@ function recordHardwareIssue(detail, options = {}) {
         color: "#a53d2d",
         ...options,
     });
+    notifyRoast("Hardware issue", detail, "error");
 }
 
 function clearRoastGraph() {
@@ -232,10 +293,14 @@ function captureTemperature(data) {
 function beginRecording(fromPreRoast) {
     roastFinished = false;
     roastRecording = true;
+    turnPointAlerted = false;
+    rorCrashAlerted = false;
     if (!preRoastAt) {
         preRoastAt = currentTimestamp();
     }
     explicitPreRoast = fromPreRoast || explicitPreRoast;
+    acquireWakeLock();
+    ensureNotificationPermission();
     roastSessionSocket.emit("control", { command: "start" });
 }
 
@@ -449,6 +514,7 @@ finishRoastButtonEl.addEventListener("click", () => {
 
     roastFinished = true;
     roastRecording = false;
+    releaseWakeLock();
     roastSessionSocket.emit("control", { command: "stop" });
     addEvent("Finish", `Roast finished at ${temperatureValueEl.textContent}. Ready for review.`, {
         showMarker: true,
@@ -488,8 +554,16 @@ hardwareHealthPollId = window.setInterval(() => {
     });
 }, 10000);
 
+// Screen wake locks are released when the tab is hidden; re-acquire on return.
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && roastRecording && !roastFinished) {
+        acquireWakeLock();
+    }
+});
+
 window.addEventListener("beforeunload", () => {
     if (hardwareHealthPollId) {
         window.clearInterval(hardwareHealthPollId);
     }
+    releaseWakeLock();
 });

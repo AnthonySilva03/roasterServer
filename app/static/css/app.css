@@ -52,7 +52,8 @@ textarea {
 .site-shell {
     max-width: var(--shell-width);
     margin: 0 auto;
-    padding: 28px 24px 56px;
+    /* Respect notch/rounded-corner safe areas when installed as a PWA. */
+    padding: calc(28px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right)) calc(56px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
 }
 
 .site-header {
