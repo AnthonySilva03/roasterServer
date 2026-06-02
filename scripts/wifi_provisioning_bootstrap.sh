@@ -20,6 +20,10 @@ WIFI_SETUP_SSID="${WIFI_SETUP_SSID:-Roaster-Setup}"
 WIFI_SETUP_PASSWORD="${WIFI_SETUP_PASSWORD:-changeme123}"
 WIFI_SETUP_CONNECTION_NAME="${WIFI_SETUP_CONNECTION_NAME:-roaster-setup}"
 WIFI_CONNECT_WAIT_SECONDS="${WIFI_CONNECT_WAIT_SECONDS:-20}"
+# Managing NetworkManager connections requires root. When the service runs as a
+# normal user (e.g. pi), set WIFI_USE_SUDO_FOR_NMCLI=true and grant passwordless
+# nmcli via sudoers, otherwise nmcli fails with "Insufficient privileges".
+WIFI_USE_SUDO_FOR_NMCLI="${WIFI_USE_SUDO_FOR_NMCLI:-false}"
 
 cd "$PROJECT_ROOT"
 mkdir -p "$PROJECT_ROOT/instance"
@@ -32,11 +36,19 @@ log() {
     echo "[roaster-bootstrap] $*"
 }
 
+nmcli_cmd() {
+    if [ "${WIFI_USE_SUDO_FOR_NMCLI,,}" = "true" ]; then
+        sudo -n nmcli "$@"
+    else
+        nmcli "$@"
+    fi
+}
+
 wait_for_saved_wifi() {
     local deadline=$((SECONDS + WIFI_CONNECT_WAIT_SECONDS))
 
     while [ "$SECONDS" -lt "$deadline" ]; do
-        if nmcli -t -f GENERAL.STATE device show "$WIFI_INTERFACE" | grep -q ":100"; then
+        if nmcli_cmd -t -f GENERAL.STATE device show "$WIFI_INTERFACE" | grep -q ":100"; then
             return 0
         fi
         sleep 2
@@ -54,15 +66,15 @@ configure_ap_profile() {
         priority=10
     fi
 
-    if ! nmcli connection show "$WIFI_SETUP_CONNECTION_NAME" >/dev/null 2>&1; then
-        nmcli connection add \
+    if ! nmcli_cmd connection show "$WIFI_SETUP_CONNECTION_NAME" >/dev/null 2>&1; then
+        nmcli_cmd connection add \
             type wifi \
             ifname "$WIFI_INTERFACE" \
             con-name "$WIFI_SETUP_CONNECTION_NAME" \
             ssid "$WIFI_SETUP_SSID"
     fi
 
-    nmcli connection modify "$WIFI_SETUP_CONNECTION_NAME" \
+    nmcli_cmd connection modify "$WIFI_SETUP_CONNECTION_NAME" \
         802-11-wireless.ssid "$WIFI_SETUP_SSID" \
         802-11-wireless.mode ap \
         802-11-wireless.band bg \
@@ -76,7 +88,7 @@ configure_ap_profile() {
 
 bring_up_ap() {
     # Bringing the AP up takes wlan0 off any client network (single radio).
-    nmcli connection up "$WIFI_SETUP_CONNECTION_NAME" ifname "$WIFI_INTERFACE"
+    nmcli_cmd connection up "$WIFI_SETUP_CONNECTION_NAME" ifname "$WIFI_INTERFACE"
 }
 
 start_direct_ap() {
