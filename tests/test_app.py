@@ -673,3 +673,22 @@ def test_captive_probe_redirects_to_dashboard_when_enabled(tmp_path):
         response = client.get(probe)
         assert response.status_code == 302
         assert response.headers["Location"].endswith("/")
+
+
+def test_pwa_manifest_served_and_valid(client):
+    import json
+
+    response = client.get("/static/manifest.webmanifest")
+    assert response.status_code == 200
+    manifest = json.loads(response.data)
+    assert manifest["start_url"] == "/"
+    assert manifest["display"] == "standalone"
+    assert any(icon["sizes"] == "512x512" for icon in manifest["icons"])
+    assert any("maskable" in icon.get("purpose", "") for icon in manifest["icons"])
+
+
+def test_dashboard_links_pwa_metadata(client):
+    body = client.get("/").get_data(as_text=True)
+    assert 'rel="manifest"' in body
+    assert 'name="theme-color"' in body
+    assert "apple-touch-icon" in body

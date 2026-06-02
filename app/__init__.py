@@ -1,8 +1,12 @@
 import logging
+import mimetypes
 from pathlib import Path
 
 from flask import Flask
 from flask_socketio import SocketIO
+
+# Ensure the PWA manifest is served with the correct content type.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 socketio = SocketIO(async_mode="eventlet")
 
