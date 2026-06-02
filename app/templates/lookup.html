@@ -3,7 +3,7 @@
 {% block title %}Lookup | Roaster Server{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet.css') }}" />
 {% endblock %}
 
 {% block content %}
@@ -151,7 +151,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='vendor/leaflet.js') }}"></script>
 <script src="{{ url_for('static', filename='js/origin_map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lookup_page.js') }}"></script>
 {% endblock %}
