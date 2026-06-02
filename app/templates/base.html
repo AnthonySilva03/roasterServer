@@ -45,5 +45,15 @@
     <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script src="{{ url_for('static', filename='js/live_charts.js') }}"></script>
     {% block scripts %}{% endblock %}
+
+    <script>
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("/sw.js").catch((error) => {
+                    console.warn("Service worker registration failed", error);
+                });
+            });
+        }
+    </script>
 </body>
 </html>

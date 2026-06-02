@@ -692,3 +692,17 @@ def test_dashboard_links_pwa_metadata(client):
     assert 'rel="manifest"' in body
     assert 'name="theme-color"' in body
     assert "apple-touch-icon" in body
+
+
+def test_service_worker_served_at_root_scope(client):
+    response = client.get("/sw.js")
+    assert response.status_code == 200
+    assert "javascript" in response.headers["Content-Type"]
+    assert response.headers.get("Service-Worker-Allowed") == "/"
+    assert b"CACHE_VERSION" in response.data
+
+
+def test_dashboard_registers_service_worker(client):
+    body = client.get("/").get_data(as_text=True)
+    assert "serviceWorker" in body
+    assert "/sw.js" in body

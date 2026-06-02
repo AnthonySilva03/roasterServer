@@ -146,6 +146,17 @@ def captive_portal_probe():
     return redirect(url_for("main.dashboard"))
 
 
+@main.route("/sw.js")
+def service_worker():
+    # Served from the root so its scope covers the whole app (a /static/ path
+    # would only control /static/). Service-Worker-Allowed widens the scope too.
+    response = send_from_directory(current_app.static_folder, "sw.js")
+    response.headers["Content-Type"] = "application/javascript"
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @main.route("/uploads/<filename>")
 def uploaded_file(filename):
     upload_folder = current_app.config.get("UPLOAD_FOLDER", "")
