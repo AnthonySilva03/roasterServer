@@ -111,15 +111,14 @@ function _initOriginMap(containerEl) {
         scrollWheelZoom: false,
         attributionControl: false,
         minZoom: 2,
-        maxZoom: 6,
+        maxZoom: 4,
         worldCopyJump: true,
     });
-    // Map tiles require internet. On the Pi's offline AP network they simply
-    // fail to load and the map falls back to the dark .leaflet-container
-    // background; origin markers still position correctly via Leaflet's CRS.
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        subdomains: "abcd",
-        maxZoom: 19,
+    // Tiles are vendored locally (CARTO dark_all, zoom 0-4) under
+    // /static/vendor/tiles so the map works on the Pi's offline AP network.
+    // maxZoom is capped at 4 to match what's bundled.
+    L.tileLayer("/static/vendor/tiles/{z}/{x}/{y}.png", {
+        maxZoom: 4,
     }).addTo(_originMap);
 }
 

@@ -148,7 +148,7 @@ The web app is an installable, offline-capable PWA, so it behaves like a native
 app on the roaster network (which has no internet):
 
 - **Install:** in the browser menu choose "Add to Home Screen" / "Install app". It then launches full-screen with its own icon.
-- **Offline:** third-party libraries are vendored locally and a service worker precaches the app shell, so the UI and saved roasts work without internet. Only the world map tiles need internet and degrade to a dark background.
+- **Offline:** third-party libraries *and* the world-map tiles (zoom 0–4) are vendored locally and a service worker precaches the app shell, so the UI, saved roasts, and the origin map all work without internet.
 - **During a roast:** the screen stays awake (Wake Lock) and you get notifications for the turn point, an RoR crash, or hardware issues. An in-progress roast is saved to the browser, so a tab close/crash can be resumed.
 
 > **⚠️ Single-radio lockout warning.** A Raspberry Pi's built-in Wi-Fi has one
