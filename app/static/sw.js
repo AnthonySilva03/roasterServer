@@ -1,6 +1,6 @@
 // Roaster Server service worker.
 // Bump CACHE_VERSION whenever precached assets change to invalidate old caches.
-const CACHE_VERSION = "roaster-v2";
+const CACHE_VERSION = "roaster-v3";
 const PRECACHE = `${CACHE_VERSION}-precache`;
 const RUNTIME = `${CACHE_VERSION}-runtime`;
 
