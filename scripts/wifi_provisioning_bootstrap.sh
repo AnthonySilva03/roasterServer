@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+#
+# NOTE: The `direct-ap` path here uses NetworkManager/nmcli, which does NOT work
+# on the Raspberry Pi's brcmfmac Wi-Fi (clients can't associate). For real Pi
+# hardware the direct access point runs on hostapd instead — see
+# scripts/install_pi_ap.sh and deploy/ap/. This script remains for the
+# `provision`/`client` modes and non-Pi/testing use.
 
 set -euo pipefail
 

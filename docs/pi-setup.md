@@ -108,14 +108,33 @@ service runs `scripts/wifi_provisioning_bootstrap.sh`, which branches on
 
 ## Direct Access-Point Mode (recommended)
 
-This is the default. The Pi becomes its own Wi-Fi hub so a phone can connect and
-run the app with no shared router.
+The Pi becomes its own Wi-Fi hub so a phone can connect and run the app with no
+shared router. **On Raspberry Pi hardware this runs on `hostapd`, not
+NetworkManager.**
 
-How it works:
+> **Why hostapd, not NetworkManager?** NM's built-in (`nmcli`/wpa_supplicant) AP
+> mode beacons on the Pi's `brcmfmac` chip but the driver rejects its cipher/PMF
+> setup ("nl80211: key setting validation failed"), so **clients can't
+> associate**. `hostapd` drives the same chip correctly. The `ROASTER_NET_MODE`
+> nmcli path in `wifi_provisioning_bootstrap.sh` is therefore **deprecated for
+> direct-ap on real Pi hardware** — use the hostapd stack below.
 
-- NetworkManager runs the Wi-Fi profile in `ap` mode with `ipv4.method shared`, which assigns the Pi `10.42.0.1` and runs DHCP/DNS for clients automatically.
-- `PORT=80` (the systemd unit grants `CAP_NET_BIND_SERVICE`) so the app answers on the default web port — no `:5000` needed.
-- `CAPTIVE_PORTAL_ENABLED=true` plus the dnsmasq config at `/etc/NetworkManager/dnsmasq-shared.d/roaster-captive.conf` resolves every hostname to the Pi and redirects the phone's captive-portal probe to the dashboard, so the app pops open automatically when the phone joins.
+### Install the hostapd AP stack
+
+```bash
+cd /home/pi/roasterServer
+sudo ./scripts/install_pi_ap.sh        # installs hostapd + dnsmasq + configs
+sudo ./scripts/install_pi_service.sh   # installs/enables the app service
+# edit SSID/passphrase in /etc/hostapd/hostapd.conf to match deploy/roaster-server.env
+sudo reboot
+```
+
+How it works (all from `deploy/ap/`, installed by `install_pi_ap.sh`):
+
+- **NetworkManager leaves `wlan0` unmanaged** (`99-roaster-unmanaged.conf`); `eth0` stays managed for wired admin access while the AP runs.
+- **hostapd** runs the AP (WPA2/CCMP, channel 6, country US). A drop-in assigns `wlan0` the gateway IP `10.42.0.1/24` before it starts.
+- **dnsmasq** serves DHCP (`10.42.0.10–100`) and a captive-portal DNS hijack (`address=/#/10.42.0.1`) so the app opens on join. It starts after hostapd.
+- The **app service** just runs the app on `PORT=80` (`CAP_NET_BIND_SERVICE` lets it bind 80 as `pi`); the in-app captive routes (`CAPTIVE_PORTAL_ENABLED=true`) redirect probes to the dashboard.
 
 From your phone:
 
