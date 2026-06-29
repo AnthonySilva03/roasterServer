@@ -43,8 +43,28 @@
 
     <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="false"></div>
 
+    <div id="pwaInstallBanner" class="pwa-install-banner" hidden>
+        <span class="pwa-install-text">Install Roaster as an app</span>
+        <div class="pwa-install-actions">
+            <button id="pwaInstallButton" class="primary" type="button">Install</button>
+            <button id="pwaInstallDismiss" class="pwa-install-dismiss" type="button" aria-label="Dismiss">✕</button>
+        </div>
+    </div>
+    <div id="pwaInstallHelp" class="pwa-install-help" hidden>
+        <div class="pwa-install-help-card">
+            <h3>Add Roaster to your home screen</h3>
+            <ol>
+                <li>If a Wi-Fi sign-in window is open, tap its menu (⋮) and choose <strong>Open in browser</strong>.</li>
+                <li>In the browser, open the menu (⋮ or the share icon).</li>
+                <li>Tap <strong>Add to Home screen</strong> (or <strong>Install app</strong>), then confirm.</li>
+            </ol>
+            <button id="pwaInstallHelpClose" class="primary" type="button">Got it</button>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script src="{{ url_for('static', filename='js/live_charts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pwa_install.js') }}"></script>
     {% block scripts %}{% endblock %}
 
     <script>

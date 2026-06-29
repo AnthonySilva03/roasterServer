@@ -1125,3 +1125,84 @@ canvas {
         max-width: none;
     }
 }
+
+.pwa-install-banner {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px 12px 18px;
+    border-radius: 16px;
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow), var(--glass-highlight);
+    max-width: min(440px, calc(100vw - 24px));
+}
+
+.pwa-install-text {
+    color: var(--ink);
+    font-size: 0.95rem;
+}
+
+.pwa-install-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.pwa-install-dismiss {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 6px 8px;
+}
+
+.pwa-install-help {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.pwa-install-help-card {
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 22px 24px;
+    max-width: 430px;
+    box-shadow: var(--shadow), var(--glass-highlight);
+}
+
+.pwa-install-help-card h3 {
+    margin: 0 0 12px;
+    color: var(--ink);
+}
+
+.pwa-install-help-card ol {
+    margin: 0 0 18px;
+    padding-left: 1.2em;
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.pwa-install-help-card strong {
+    color: var(--accent-dark);
+}
+
+/* Class selectors above would otherwise beat the UA [hidden] rule. */
+.pwa-install-banner[hidden],
+.pwa-install-help[hidden] {
+    display: none;
+}

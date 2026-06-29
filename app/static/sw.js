@@ -1,6 +1,6 @@
 // Roaster Server service worker.
 // Bump CACHE_VERSION whenever precached assets change to invalidate old caches.
-const CACHE_VERSION = "roaster-v4";
+const CACHE_VERSION = "roaster-v5";
 const PRECACHE = `${CACHE_VERSION}-precache`;
 const RUNTIME = `${CACHE_VERSION}-runtime`;
 
@@ -17,6 +17,7 @@ const STATIC_ASSETS = [
     "/static/js/lookup_page.js",
     "/static/js/lookup_edit.js",
     "/static/js/settings.js",
+    "/static/js/pwa_install.js",
     "/static/js/origin_map.js",
     "/static/vendor/socket.io.min.js",
     "/static/vendor/chart.umd.min.js",
