@@ -19,6 +19,7 @@ WIFI_INTERFACE="${WIFI_INTERFACE:-wlan0}"
 WIFI_SETUP_SSID="${WIFI_SETUP_SSID:-Roaster-Setup}"
 WIFI_SETUP_PASSWORD="${WIFI_SETUP_PASSWORD:-changeme123}"
 WIFI_SETUP_CONNECTION_NAME="${WIFI_SETUP_CONNECTION_NAME:-roaster-setup}"
+WIFI_AP_CHANNEL="${WIFI_AP_CHANNEL:-6}"
 WIFI_CONNECT_WAIT_SECONDS="${WIFI_CONNECT_WAIT_SECONDS:-20}"
 # Managing NetworkManager connections requires root. When the service runs as a
 # normal user (e.g. pi), set WIFI_USE_SUDO_FOR_NMCLI=true and grant passwordless
@@ -74,13 +75,21 @@ configure_ap_profile() {
             ssid "$WIFI_SETUP_SSID"
     fi
 
+    # The Pi's brcmfmac driver rejects NetworkManager's default (unspecified)
+    # AP cipher/PMF config with "key setting validation failed", so pin
+    # WPA2/RSN + CCMP, disable PMF, and use a fixed 2.4GHz channel.
     nmcli_cmd connection modify "$WIFI_SETUP_CONNECTION_NAME" \
         802-11-wireless.ssid "$WIFI_SETUP_SSID" \
         802-11-wireless.mode ap \
         802-11-wireless.band bg \
+        802-11-wireless.channel "$WIFI_AP_CHANNEL" \
         ipv4.method shared \
         ipv6.method ignore \
         wifi-sec.key-mgmt wpa-psk \
+        wifi-sec.proto rsn \
+        wifi-sec.pairwise ccmp \
+        wifi-sec.group ccmp \
+        wifi-sec.pmf disable \
         wifi-sec.psk "$WIFI_SETUP_PASSWORD" \
         connection.autoconnect "$autoconnect_flag" \
         connection.autoconnect-priority "$priority"

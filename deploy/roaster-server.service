@@ -14,8 +14,9 @@ WorkingDirectory=/home/pi/roasterServer
 EnvironmentFile=/home/pi/roasterServer/deploy/roaster-server.env
 ExecStart=/home/pi/roasterServer/scripts/wifi_provisioning_bootstrap.sh
 # Allow binding the privileged port 80 (PORT=80 in the env) while running as pi.
+# Do NOT add CapabilityBoundingSet=CAP_NET_BIND_SERVICE here: it strips the caps
+# sudo needs (SETUID/SETGID/AUDIT_WRITE), breaking the bootstrap's `sudo nmcli`.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 Restart=always
 RestartSec=5
 
