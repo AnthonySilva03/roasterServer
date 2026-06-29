@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | Roaster Server{% endblock %}
+{% block body_attrs %}
+data-servo-min="{{ servo_min_pulsewidth }}"
+data-servo-max="{{ servo_max_pulsewidth }}"
+{% endblock %}
+
+{% block content %}
+<main class="page-grid">
+    <section class="hero-grid">
+        <article class="panel strong panel-pad">
+            <div class="eyebrow">Settings</div>
+            <h1 class="hero-title">Hardware check &amp; flame calibration</h1>
+            <p class="copy">
+                Confirm the temperature sensor and flame servo respond, and use the slider to
+                drive the servo across its range while watching the flame lever.
+            </p>
+            <div id="settingsMessage" class="message strong">Connecting to the sensor stream...</div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="status-pill">Status: <span id="connStatus">Connecting...</span> <span id="simulatedBadge" class="simulated-badge" style="display:none;">SIMULATED</span></div>
+            <div class="status-pill">Source: <span id="sensorSource">Unknown</span></div>
+            <div class="status-pill">Updated: <span id="lastUpdated">--</span></div>
+        </aside>
+    </section>
+
+    <section class="content-grid">
+        <article class="panel panel-pad detail-stack">
+            <h2 class="section-title">Temperature Sensor</h2>
+            <p class="helper-text">Live reading from the thermocouple. A steady, sensible value means the sensor is wired correctly.</p>
+            <div class="summary-block">
+                <div class="metric-label">Current Temperature</div>
+                <div id="tempValue" class="summary-number">--.- °C</div>
+            </div>
+            <div class="three-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Sensor</div>
+                    <div id="tempHealth" class="health-value">Checking...</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Mode</div>
+                    <div id="hwMode" class="health-value">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Last Error</div>
+                    <div id="tempError" class="detail-copy">--</div>
+                </div>
+            </div>
+        </article>
+
+        <article class="panel panel-pad detail-stack">
+            <h2 class="section-title">Flame Servo Calibration</h2>
+            <p class="helper-text">Move the slider and watch the flame lever. The servo position maps linearly to a pulse width between the configured limits.</p>
+            <label>
+                Flame Level
+                <input id="flameControl" type="range" min="0" max="100" step="1" value="50">
+            </label>
+            <div class="three-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Flame</div>
+                    <div id="flameValue" class="summary-number">50%</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Pulse Width</div>
+                    <div id="pulseValue" class="summary-number">-- µs</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Servo</div>
+                    <div id="servoHealth" class="health-value">Checking...</div>
+                </div>
+            </div>
+            <div class="control-grid">
+                <button class="ghost" type="button" data-flame="0">0% (min)</button>
+                <button class="ghost" type="button" data-flame="50">50%</button>
+                <button class="ghost" type="button" data-flame="100">100% (max)</button>
+            </div>
+            <p class="helper-text">Pulse-width limits ({{ servo_min_pulsewidth }}–{{ servo_max_pulsewidth }} µs) are set via <code>SERVO_MIN_PULSEWIDTH</code> / <code>SERVO_MAX_PULSEWIDTH</code> in the environment.</p>
+        </article>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

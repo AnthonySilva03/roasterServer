@@ -2,7 +2,7 @@ from app.services import wifi_service
 
 
 def test_pages_render(client):
-    for path in ["/", "/roast", "/lookup", "/roast/session?bean_name=Test&origin=Kenya&weight_grams=350", "/roast/review"]:
+    for path in ["/", "/roast", "/lookup", "/roast/session?bean_name=Test&origin=Kenya&weight_grams=350", "/roast/review", "/settings"]:
         response = client.get(path)
         assert response.status_code == 200
 

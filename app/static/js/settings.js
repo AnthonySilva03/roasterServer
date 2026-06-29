@@ -1,0 +1,101 @@
+const settingsSocket = io();
+
+const servoMin = Number(document.body.dataset.servoMin || 1000);
+const servoMax = Number(document.body.dataset.servoMax || 2000);
+
+const settingsMessageEl = document.getElementById("settingsMessage");
+const connStatusEl = document.getElementById("connStatus");
+const sensorSourceEl = document.getElementById("sensorSource");
+const lastUpdatedEl = document.getElementById("lastUpdated");
+const simulatedBadgeEl = document.getElementById("simulatedBadge");
+const tempValueEl = document.getElementById("tempValue");
+const tempHealthEl = document.getElementById("tempHealth");
+const hwModeEl = document.getElementById("hwMode");
+const tempErrorEl = document.getElementById("tempError");
+const flameControlEl = document.getElementById("flameControl");
+const flameValueEl = document.getElementById("flameValue");
+const pulseValueEl = document.getElementById("pulseValue");
+const servoHealthEl = document.getElementById("servoHealth");
+
+function setHealthChip(element, ok, okText, failText) {
+    element.textContent = ok ? okText : failText;
+    element.classList.toggle("health-ok", Boolean(ok));
+    element.classList.toggle("health-fail", !ok);
+}
+
+function flameToPulse(flameLevel) {
+    return Math.round(servoMin + (servoMax - servoMin) * (flameLevel / 100));
+}
+
+function renderFlame(flameLevel) {
+    flameValueEl.textContent = `${flameLevel}%`;
+    pulseValueEl.textContent = `${flameToPulse(flameLevel)} µs`;
+}
+
+function applyFlame(flameLevel, emit) {
+    const bounded = Math.max(0, Math.min(100, Math.round(flameLevel)));
+    flameControlEl.value = String(bounded);
+    renderFlame(bounded);
+    if (emit) {
+        settingsSocket.emit("control", { command: "set_flame_level", flame_level: bounded });
+    }
+}
+
+flameControlEl.addEventListener("input", () => {
+    applyFlame(Number(flameControlEl.value), true);
+});
+
+document.querySelectorAll("[data-flame]").forEach((button) => {
+    button.addEventListener("click", () => applyFlame(Number(button.dataset.flame), true));
+});
+
+settingsSocket.on("connect", () => {
+    connStatusEl.textContent = "Connected";
+    settingsMessageEl.textContent = "Connected. Watch the temperature and move the flame slider to test the servo.";
+    settingsMessageEl.classList.remove("message-disconnected");
+});
+
+settingsSocket.on("disconnect", () => {
+    connStatusEl.textContent = "Disconnected";
+    settingsMessageEl.textContent = "Connection lost — reconnecting to the sensor stream.";
+    settingsMessageEl.classList.add("message-disconnected");
+    if (simulatedBadgeEl) {
+        simulatedBadgeEl.style.display = "none";
+    }
+});
+
+settingsSocket.on("sensor_data", (data) => {
+    tempValueEl.textContent = `${Number(data.temperature).toFixed(1)} °C`;
+    sensorSourceEl.textContent = data.source || "Unknown";
+    lastUpdatedEl.textContent = data.timestamp || "--";
+});
+
+settingsSocket.on("sensor_state", (state) => {
+    connStatusEl.textContent = state.active ? "Streaming" : "Paused";
+    sensorSourceEl.textContent = state.source || "Unknown";
+    if (simulatedBadgeEl) {
+        simulatedBadgeEl.style.display = state.simulated ? "inline" : "none";
+    }
+    if (state.flame_level !== undefined && state.flame_level !== null) {
+        applyFlame(Number(state.flame_level), false);
+    }
+});
+
+async function loadHealth() {
+    try {
+        const response = await fetch("/api/sensor/health");
+        const health = await response.json();
+        setHealthChip(tempHealthEl, health.temperature_ok, "Online", "Offline");
+        setHealthChip(servoHealthEl, health.servo_ok, "Online", "Offline");
+        hwModeEl.textContent = health.mode || "Unknown";
+        tempErrorEl.textContent = health.last_temperature_error || "No errors reported.";
+    } catch (error) {
+        setHealthChip(tempHealthEl, false, "Online", "Unreachable");
+        setHealthChip(servoHealthEl, false, "Online", "Unreachable");
+        tempErrorEl.textContent = "Health endpoint unavailable.";
+    }
+}
+
+renderFlame(Number(flameControlEl.value));
+loadHealth();
+window.setInterval(loadHealth, 10000);

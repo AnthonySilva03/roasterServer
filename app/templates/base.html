@@ -33,6 +33,7 @@
                 <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard</a>
                 <a class="nav-link {% if active_page == 'roast' %}active{% endif %}" href="{{ url_for('main.roast_page') }}">Roasting</a>
                 <a class="nav-link {% if active_page == 'lookup' %}active{% endif %}" href="{{ url_for('main.lookup_page') }}">Lookup</a>
+                <a class="nav-link {% if active_page == 'settings' %}active{% endif %}" href="{{ url_for('main.settings_page') }}">Settings</a>
             </nav>
             {% endif %}
         </header>

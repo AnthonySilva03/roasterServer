@@ -97,6 +97,17 @@ def lookup_page():
     )
 
 
+@main.route("/settings")
+def settings_page():
+    current_app.logger.info("Rendered settings page")
+    return render_template(
+        "settings.html",
+        active_page="settings",
+        servo_min_pulsewidth=current_app.config["SERVO_MIN_PULSEWIDTH"],
+        servo_max_pulsewidth=current_app.config["SERVO_MAX_PULSEWIDTH"],
+    )
+
+
 @main.route("/lookup/<int:roast_id>/edit")
 def lookup_edit_page(roast_id):
     roast = get_roast_session(roast_id)
