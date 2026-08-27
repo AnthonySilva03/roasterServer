@@ -88,6 +88,23 @@ class SensorService:
             "source": self.source_name,
         }
 
+    def set_servo_pulsewidth_raw(self, pulsewidth: int | float) -> dict:
+        """Drive the servo directly to a pulse width (µs), for calibration."""
+        bounded = max(400, min(3000, int(round(float(pulsewidth)))))
+        if self._pi:
+            self._pi.set_servo_pulsewidth(self.servo_pin, bounded)
+        return {"pulsewidth": bounded, "source": self.source_name}
+
+    def set_servo_calibration(self, servo_min_pulsewidth: int, servo_max_pulsewidth: int) -> dict:
+        """Update the flame-level pulse-width range and re-apply the current flame."""
+        self.servo_min_pulsewidth = int(servo_min_pulsewidth)
+        self.servo_max_pulsewidth = int(servo_max_pulsewidth)
+        self.set_flame_level(self._current_flame_level)
+        return {
+            "servo_min_pulsewidth": self.servo_min_pulsewidth,
+            "servo_max_pulsewidth": self.servo_max_pulsewidth,
+        }
+
     def health_status(self) -> dict:
         status = {
             "mode": self.sensor_mode,
@@ -97,6 +114,8 @@ class SensorService:
             "source": self.source_name,
             "last_temperature_error": self._last_temperature_error,
             "flame_level": self._current_flame_level,
+            "servo_min_pulsewidth": self.servo_min_pulsewidth,
+            "servo_max_pulsewidth": self.servo_max_pulsewidth,
         }
 
         if self.sensor_mode != "pigpio":

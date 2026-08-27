@@ -16,6 +16,7 @@ from app.services.roast_storage import (
     update_roast_session,
 )
 from app.services import wifi_service
+from app.services.calibration import save_calibration
 
 
 main = Blueprint("main", __name__)
@@ -629,3 +630,26 @@ def get_sensor_health():
             },
         )
     return jsonify(health), status_code
+
+
+@main.route("/api/sensor/calibration", methods=["POST"])
+def set_sensor_calibration():
+    if sockets_module.sensor_service is None:
+        return jsonify({"error": "Sensor service is not ready yet."}), 503
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        min_pw = int(payload["servo_min_pulsewidth"])
+        max_pw = int(payload["servo_max_pulsewidth"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "Min and max pulse widths must be whole numbers in µs."}), 400
+
+    if not (400 <= min_pw <= 3000) or not (400 <= max_pw <= 3000):
+        return jsonify({"error": "Pulse widths must be between 400 and 3000 µs."}), 400
+    if max_pw - min_pw < 100:
+        return jsonify({"error": "Max must be at least 100 µs above min."}), 400
+
+    result = sockets_module.sensor_service.set_servo_calibration(min_pw, max_pw)
+    save_calibration(current_app, min_pw, max_pw)
+    current_app.logger.info("Saved servo calibration", extra={"min": min_pw, "max": max_pw})
+    return jsonify(result)

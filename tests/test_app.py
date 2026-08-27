@@ -706,3 +706,31 @@ def test_dashboard_registers_service_worker(client):
     body = client.get("/").get_data(as_text=True)
     assert "serviceWorker" in body
     assert "/sw.js" in body
+
+
+def test_sensor_calibration_saves_and_applies(client):
+    response = client.post(
+        "/api/sensor/calibration",
+        json={"servo_min_pulsewidth": 600, "servo_max_pulsewidth": 2400},
+    )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["servo_min_pulsewidth"] == 600
+    assert body["servo_max_pulsewidth"] == 2400
+
+    # It should be reflected in the health payload (the live sensor range).
+    health = client.get("/api/sensor/health").get_json()
+    assert health["servo_min_pulsewidth"] == 600
+    assert health["servo_max_pulsewidth"] == 2400
+
+
+def test_sensor_calibration_rejects_bad_range(client):
+    # max not above min
+    r1 = client.post("/api/sensor/calibration", json={"servo_min_pulsewidth": 2000, "servo_max_pulsewidth": 2000})
+    assert r1.status_code == 400
+    # out of bounds
+    r2 = client.post("/api/sensor/calibration", json={"servo_min_pulsewidth": 100, "servo_max_pulsewidth": 5000})
+    assert r2.status_code == 400
+    # non-numeric
+    r3 = client.post("/api/sensor/calibration", json={"servo_min_pulsewidth": "x", "servo_max_pulsewidth": 2000})
+    assert r3.status_code == 400

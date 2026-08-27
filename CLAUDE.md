@@ -93,7 +93,8 @@ PATCH /api/roasts/<id>          update metadata, notes, rating, tasting notes
 DELETE /api/roasts/<id>         remove roast + photo file
 GET  /api/roasts/<id>/export    download a single roast as portable JSON
 POST /api/roasts/import         restore one or many roasts from exported JSON
-GET  /api/sensor/health         hardware health check
+GET  /api/sensor/health         hardware health check (incl. servo pulse-width range)
+POST /api/sensor/calibration    set + persist servo min/max pulse width (flame endpoints)
 GET  /uploads/<filename>        serve saved photo files
 ```
 

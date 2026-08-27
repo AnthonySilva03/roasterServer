@@ -4,6 +4,7 @@ from flask_socketio import emit
 
 from . import socketio
 from .services.sensor_service import SensorService
+from .services.calibration import load_calibration
 
 
 logger = logging.getLogger("roasterServer.sockets")
@@ -22,6 +23,8 @@ def register_socket_handlers(app):
     sensor_log_every_n = max(1, int(app.config.get("SENSOR_LOG_EVERY_N", 10)))
 
     if sensor_service is None:
+        # Saved calibration overrides the env pulse-width defaults.
+        calibration = load_calibration(app)
         sensor_service = SensorService(
             interval_seconds=sensor_interval_seconds,
             sensor_mode=app.config["SENSOR_MODE"],
@@ -29,8 +32,8 @@ def register_socket_handlers(app):
             max6675_clk_pin=app.config["MAX6675_CLK_PIN"],
             max6675_do_pin=app.config["MAX6675_DO_PIN"],
             servo_control_pin=app.config["SERVO_CONTROL_PIN"],
-            servo_min_pulsewidth=app.config["SERVO_MIN_PULSEWIDTH"],
-            servo_max_pulsewidth=app.config["SERVO_MAX_PULSEWIDTH"],
+            servo_min_pulsewidth=calibration.get("servo_min_pulsewidth", app.config["SERVO_MIN_PULSEWIDTH"]),
+            servo_max_pulsewidth=calibration.get("servo_max_pulsewidth", app.config["SERVO_MAX_PULSEWIDTH"]),
         )
         logger.info(
             "Sensor service initialized mode=%s interval=%.2fs flame_level=%s",
@@ -120,6 +123,10 @@ def handle_control(data):
         flame_level = (data or {}).get("flame_level", 50)
         result = sensor_service.set_flame_level(flame_level)
         message = f"Flame controller set to {result['flame_level']}%."
+    elif command == "set_servo_pulsewidth":
+        pulsewidth = (data or {}).get("pulsewidth", 1500)
+        result = sensor_service.set_servo_pulsewidth_raw(pulsewidth)
+        message = f"Servo pulse width set to {result['pulsewidth']} µs."
     else:
         message = "Unknown command."
         logger.warning("Unknown socket control command=%s", command)

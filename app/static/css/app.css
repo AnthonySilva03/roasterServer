@@ -1206,3 +1206,19 @@ canvas {
 .pwa-install-help[hidden] {
     display: none;
 }
+
+.cal-input {
+    width: 100%;
+    margin: 8px 0;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: rgba(7, 11, 21, 0.6);
+    color: var(--ink);
+    font-size: 1rem;
+}
+
+.cal-use {
+    font-size: 0.85rem;
+    padding: 6px 10px;
+}

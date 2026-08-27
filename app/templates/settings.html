@@ -76,7 +76,42 @@ data-servo-max="{{ servo_max_pulsewidth }}"
                 <button class="ghost" type="button" data-flame="50">50%</button>
                 <button class="ghost" type="button" data-flame="100">100% (max)</button>
             </div>
-            <p class="helper-text">Pulse-width limits ({{ servo_min_pulsewidth }}–{{ servo_max_pulsewidth }} µs) are set via <code>SERVO_MIN_PULSEWIDTH</code> / <code>SERVO_MAX_PULSEWIDTH</code> in the environment.</p>
+        </article>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="section-title">Save Calibration</h2>
+                <p class="helper-text">Drag the raw slider to move the servo directly and find the pulse width at each end of the flame lever's travel. Set those as the 0% and 100% endpoints, then save — they apply immediately and persist across restarts.</p>
+            </div>
+
+            <label>
+                Raw servo position (µs)
+                <input id="rawServoControl" type="range" min="500" max="2500" step="10" value="1500">
+            </label>
+            <div class="summary-block">
+                <div class="metric-label">Servo at</div>
+                <div id="rawServoValue" class="summary-number">1500 µs</div>
+            </div>
+
+            <div class="summary-grid analytics-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Min pulse width — 0% (µs)</div>
+                    <input id="calMin" type="number" min="400" max="3000" step="10" class="cal-input">
+                    <button class="ghost cal-use" type="button" data-target="calMin">Use slider value</button>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Max pulse width — 100% (µs)</div>
+                    <input id="calMax" type="number" min="400" max="3000" step="10" class="cal-input">
+                    <button class="ghost cal-use" type="button" data-target="calMax">Use slider value</button>
+                </div>
+            </div>
+
+            <div class="inline-controls">
+                <button id="saveCalibration" class="primary" type="button">Save calibration</button>
+            </div>
+            <div id="calMessage" class="helper-text">Current range comes from the saved calibration or the environment defaults.</div>
         </article>
     </section>
 </main>
