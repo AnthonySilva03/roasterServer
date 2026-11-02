@@ -18,11 +18,64 @@ const photoInputEl = document.getElementById("photoInput");
 const photoPreviewWrapEl = document.getElementById("photoPreviewWrap");
 const photoPreviewEl = document.getElementById("photoPreview");
 
+const reviewPhaseSummaryEl = document.getElementById("reviewPhaseSummary");
+const reviewAucEl = document.getElementById("reviewAuc");
+const reviewRoastedWeightEl = document.getElementById("reviewRoastedWeight");
+const reviewWeightLossEl = document.getElementById("reviewWeightLoss");
+const reviewRoastColorEl = document.getElementById("reviewRoastColor");
+const reviewBatchLabelEl = document.getElementById("reviewBatchLabel");
+const reviewMoistureEl = document.getElementById("reviewMoisture");
+const reviewAmbientEl = document.getElementById("reviewAmbient");
+
+// Post-roast properties typed on this page are kept on the pending payload so
+// they survive a reload and go out with the save.
+const PROPERTY_INPUTS = [
+    ["roasted_weight_grams", reviewRoastedWeightEl, "number"],
+    ["roast_color", reviewRoastColorEl, "text"],
+    ["batch_label", reviewBatchLabelEl, "text"],
+    ["green_moisture_percent", reviewMoistureEl, "number"],
+    ["ambient_temp_c", reviewAmbientEl, "number"],
+];
+
+function renderWeightLoss() {
+    const weightIn = Number(pendingRoast?.weight_grams);
+    const weightOut = Number(pendingRoast?.roasted_weight_grams);
+    reviewWeightLossEl.value = weightIn > 0 && Number.isFinite(weightOut) && pendingRoast?.roasted_weight_grams !== null
+        ? `${(((weightIn - weightOut) / weightIn) * 100).toFixed(1)}%`
+        : "--";
+}
+
+function fillPropertyInputs() {
+    PROPERTY_INPUTS.forEach(([field, element]) => {
+        const value = pendingRoast?.[field];
+        element.value = value === null || value === undefined ? "" : String(value);
+    });
+    renderWeightLoss();
+}
+
+PROPERTY_INPUTS.forEach(([field, element, type]) => {
+    element.addEventListener("input", () => {
+        if (!pendingRoast) {
+            return;
+        }
+        const raw = element.value.trim();
+        if (type === "number") {
+            pendingRoast[field] = raw === "" ? null : Number(raw);
+        } else {
+            pendingRoast[field] = raw;
+        }
+        renderWeightLoss();
+        localStorage.setItem("pendingRoastReview", JSON.stringify(pendingRoast));
+    });
+});
+
 const reviewTemperatureChart = createLineChart(
     "reviewTemperatureChart",
     "Roast Review Temperature",
     "#b4542b"
 );
+enableRorOverlay(reviewTemperatureChart);
+enableFlameOverlay(reviewTemperatureChart);
 
 let pendingRoast = null;
 
@@ -32,6 +85,10 @@ function renderPendingRoast() {
         reviewSubtitleEl.textContent = "Return to the roast page to begin a session.";
         reviewAnalyticsCopyEl.textContent = "No analytics are available because no roast is waiting for review.";
         setChartSeries(reviewTemperatureChart, []);
+        setRorSeries(reviewTemperatureChart, []);
+        setFlameSeries(reviewTemperatureChart, []);
+        setPhaseBands(reviewTemperatureChart, []);
+        renderPhaseSummary(reviewPhaseSummaryEl, null);
         return;
     }
 
@@ -63,18 +120,22 @@ function renderPendingRoast() {
     reviewPeakTemperatureEl.textContent = Number.isFinite(analytics.peakTemperature)
         ? `${analytics.peakTemperature.toFixed(1)} °C`
         : "--";
+    reviewAucEl.textContent = formatAuc(analytics.auc);
+    fillPropertyInputs();
     reviewMessageEl.textContent = "Review the roast and choose Save or Cancel.";
     reviewAnalyticsCopyEl.textContent = analytics.developmentSeconds !== null
         ? `This review includes the graph that will be saved. Development ran ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`
         : "First crack was not marked, so development metrics are limited for this roast.";
 
-    setChartSeries(
-        reviewTemperatureChart,
-        buildChartSeries(pendingRoast.curve || [], {
-            startedAt: pendingRoast.started_at,
-            endedAt: pendingRoast.ended_at,
-        })
-    );
+    const chartOptions = {
+        startedAt: pendingRoast.started_at,
+        endedAt: pendingRoast.ended_at,
+    };
+    setChartSeries(reviewTemperatureChart, buildChartSeries(pendingRoast.curve || [], chartOptions));
+    setRorSeries(reviewTemperatureChart, buildRorSeries(pendingRoast.curve || [], chartOptions));
+    setFlameSeries(reviewTemperatureChart, buildFlameSeries(pendingRoast.curve || [], chartOptions));
+    setPhaseBands(reviewTemperatureChart, buildPhaseBands(analytics.phases));
+    renderPhaseSummary(reviewPhaseSummaryEl, analytics.phases);
     setStageMarkers(reviewTemperatureChart, []);
     setStageBadges(
         reviewTemperatureChart,

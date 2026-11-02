@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Reports | Roaster Server{% endblock %}
+
+{% block content %}
+<main class="page-grid">
+    <section class="hero-grid">
+        <article class="panel strong panel-pad">
+            <div class="eyebrow">Ranking Report</div>
+            <h1 class="hero-title">Every saved roast, side by side.</h1>
+            <p class="copy">
+                Sort by any column to compare development ratio, drop temperature, weight loss,
+                area under curve and cup rating across batches. Click a row to open the roast.
+            </p>
+            <div class="inline-controls">
+                <button class="primary" id="refreshReportButton" type="button">Refresh</button>
+                <button class="ghost" id="downloadReportCsvButton" type="button">Download CSV</button>
+            </div>
+            <p class="helper-text" id="reportSummary">Loading report...</p>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="status-pill">AUC base <span id="reportAucBase">--</span></div>
+            <div class="status-pill">Times <span>from Charge</span></div>
+            <div class="status-pill">DTR <span>development ÷ total</span></div>
+            <p class="helper-text">The AUC base temperature is set on the settings page.</p>
+        </aside>
+    </section>
+
+    <section class="panel panel-pad">
+        <div class="report-table-wrap">
+            <table class="report-table" id="reportTable">
+                <thead>
+                    <tr id="reportHeaderRow"></tr>
+                </thead>
+                <tbody id="reportBody">
+                    <tr><td class="empty-state">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+{% endblock %}

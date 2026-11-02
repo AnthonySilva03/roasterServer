@@ -11,10 +11,9 @@
     <section class="hero-grid">
         <article class="panel strong panel-pad">
             <div class="eyebrow">Roast Lookup</div>
-            <h1 class="hero-title">Review saved roast sessions and compare curve history.</h1>
+            <h1 class="hero-title">Saved roasts</h1>
             <p class="copy">
-                Search through saved batches, inspect roast notes, and graph the curve you captured
-                during roasting.
+                Browse batches, inspect curves and notes, export to CSV or Artisan, and overlay two roasts side by side.
             </p>
             <div class="inline-controls">
                 <button class="primary" id="refreshLookupButton" type="button">Refresh list</button>
@@ -84,6 +83,8 @@
                 <div class="inline-controls">
                     <a id="editRoastLink" class="secondary button-link" href="{{ url_for('main.lookup_page') }}">Edit Roast</a>
                     <a id="exportRoastLink" class="ghost button-link" href="{{ url_for('main.lookup_page') }}" download>Export JSON</a>
+                    <a id="exportCsvLink" class="ghost button-link" href="{{ url_for('main.lookup_page') }}" download>Export CSV</a>
+                    <a id="exportAlogLink" class="ghost button-link" href="{{ url_for('main.lookup_page') }}" download>Export for Artisan</a>
                     <button id="removeRoastButton" class="ghost" type="button">Remove Roast</button>
                 </div>
             </div>
@@ -92,10 +93,20 @@
                 <div class="lookup-chart-header">
                     <div>
                         <h3 class="chart-title">Saved Temperature Curve</h3>
-                        <p class="helper-text">The chart leads the roast detail view so stage timing and temperature shape are easier to read.</p>
+                        <p class="helper-text">Bean temperature with rate of rise, flame steps, and phase bands. Pick a second roast to overlay it, aligned at Charge.</p>
                     </div>
+                    <label class="lookup-compare">
+                        Compare with
+                        <select id="compareSelect">
+                            <option value="">None</option>
+                        </select>
+                    </label>
                 </div>
                 <canvas id="lookupTemperatureChart"></canvas>
+                <div id="comparePhaseSummary" class="helper-text" style="display:none;"></div>
+                <div id="lookupPhaseSummary" class="phase-summary">
+                    <div class="empty-state">Phase breakdown appears after Charge is marked.</div>
+                </div>
             </article>
 
             <div class="summary-grid analytics-grid">
@@ -115,9 +126,21 @@
                     <div class="metric-label">Peak Temperature</div>
                     <div id="detailPeakTemperature" class="summary-number">--</div>
                 </div>
+                <div class="summary-block">
+                    <div class="metric-label">Area Under Curve</div>
+                    <div id="detailAuc" class="summary-number">--</div>
+                </div>
             </div>
 
             <div class="lookup-detail-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Key Temperatures</div>
+                    <div id="detailKeyTemps" class="key-temps"></div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Roast Properties</div>
+                    <div id="detailProperties" class="key-temps"></div>
+                </div>
                 <div class="summary-block">
                     <div class="metric-label">Cup Rating</div>
                     <div id="detailRating" class="summary-number">--</div>

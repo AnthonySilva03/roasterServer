@@ -12,6 +12,29 @@ const editBeanNameInputEl = document.getElementById("editBeanNameInput");
 const editOriginInputEl = document.getElementById("editOriginInput");
 const editRoastLevelInputEl = document.getElementById("editRoastLevelInput");
 const editWeightInputEl = document.getElementById("editWeightInput");
+const editRoastedWeightInputEl = document.getElementById("editRoastedWeightInput");
+const editRoastColorInputEl = document.getElementById("editRoastColorInput");
+const editBatchLabelInputEl = document.getElementById("editBatchLabelInput");
+const editMoistureInputEl = document.getElementById("editMoistureInput");
+const editAmbientInputEl = document.getElementById("editAmbientInput");
+const editWeightLossEl = document.getElementById("editWeightLoss");
+
+function numberOrNull(element) {
+    const raw = element.value.trim();
+    return raw === "" ? null : Number(raw);
+}
+
+function renderEditWeightLoss() {
+    const weightIn = Number(editWeightInputEl.value);
+    const weightOut = numberOrNull(editRoastedWeightInputEl);
+    editWeightLossEl.textContent = weightIn > 0 && weightOut !== null && Number.isFinite(weightOut)
+        ? `Weight loss: ${(((weightIn - weightOut) / weightIn) * 100).toFixed(1)}%`
+        : "Weight loss: --";
+}
+
+[editWeightInputEl, editRoastedWeightInputEl].forEach((element) => {
+    element.addEventListener("input", renderEditWeightLoss);
+});
 const editRoastNotesInputEl = document.getElementById("editRoastNotesInput");
 const tasteRatingInputEl = document.getElementById("tasteRatingInput");
 const tasteNotesInputEl = document.getElementById("tasteNotesInput");
@@ -45,6 +68,13 @@ function renderRoastFeedback(roast) {
     editRoastNotesInputEl.value = roast.notes || "";
     tasteRatingInputEl.value = roast.rating ? String(roast.rating) : "";
     tasteNotesInputEl.value = roast.taste_notes || "";
+    const asInput = (value) => (value === null || value === undefined ? "" : String(value));
+    editRoastedWeightInputEl.value = asInput(roast.roasted_weight_grams);
+    editRoastColorInputEl.value = roast.roast_color || "";
+    editBatchLabelInputEl.value = roast.batch_label || "";
+    editMoistureInputEl.value = asInput(roast.green_moisture_percent);
+    editAmbientInputEl.value = asInput(roast.ambient_temp_c);
+    renderEditWeightLoss();
 }
 
 async function loadRoastFeedback() {
@@ -67,6 +97,11 @@ saveTasteFeedbackButtonEl.addEventListener("click", async () => {
         notes: editRoastNotesInputEl.value.trim(),
         rating: tasteRatingInputEl.value ? Number(tasteRatingInputEl.value) : null,
         taste_notes: tasteNotesInputEl.value.trim(),
+        roasted_weight_grams: numberOrNull(editRoastedWeightInputEl),
+        roast_color: editRoastColorInputEl.value.trim(),
+        batch_label: editBatchLabelInputEl.value.trim(),
+        green_moisture_percent: numberOrNull(editMoistureInputEl),
+        ambient_temp_c: numberOrNull(editAmbientInputEl),
     };
 
     const response = await fetch(`/api/roasts/${roastId}`, {

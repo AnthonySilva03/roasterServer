@@ -23,6 +23,16 @@ DEFAULT_SERVO_MAX_PULSEWIDTH = 2000
 _FRESH_READ_INTERVALS = 2.0
 
 
+def _sample_timestamp(now: float | None = None) -> str:
+    """Wall-clock sample time as HH:MM:SS.mmm (local time)."""
+    now = time.time() if now is None else now
+    millis = int(round((now - int(now)) * 1000))
+    if millis >= 1000:  # rounding carried into the next second
+        now += 1
+        millis = 0
+    return f"{time.strftime('%H:%M:%S', time.localtime(now))}.{millis:03d}"
+
+
 class SensorService:
     def __init__(
         self,
@@ -86,7 +96,9 @@ class SensorService:
             )
 
         sample = {
-            "timestamp": time.strftime("%H:%M:%S"),
+            # Wall-clock with milliseconds so the rate-of-rise slope is not
+            # quantised to whole seconds (the chart parses HH:MM:SS[.mmm]).
+            "timestamp": _sample_timestamp(),
             "temperature": None if temperature is None else round(temperature, 2),
             "source": self.source_name,
             "flame_level": self._current_flame_level,

@@ -146,6 +146,7 @@ async function loadHealth() {
         setHealthChip(servoHealthEl, health.servo_ok, "Online", "Offline");
         hwModeEl.textContent = health.mode || "Unknown";
         tempErrorEl.textContent = health.last_temperature_error || "No errors reported.";
+        renderSafety(health.safety);
 
         // Keep the flame→µs mapping in sync with the live (possibly recalibrated) range.
         if (Number.isFinite(health.servo_min_pulsewidth) && Number.isFinite(health.servo_max_pulsewidth)) {
@@ -163,6 +164,74 @@ async function loadHealth() {
         setHealthChip(servoHealthEl, false, "Online", "Unreachable");
         tempErrorEl.textContent = "Health endpoint unavailable.";
     }
+}
+
+// --- Roast analysis settings (per device, localStorage) ---
+const rorWindowEl = document.getElementById("rorWindow");
+const rorSmoothingEl = document.getElementById("rorSmoothing");
+const dryEndTargetEl = document.getElementById("dryEndTarget");
+const firstCrackTargetEl = document.getElementById("firstCrackTarget");
+const aucBaseEl = document.getElementById("aucBase");
+const safetyMaxTempEl = document.getElementById("safetyMaxTemp");
+const safetyFaultPolicyEl = document.getElementById("safetyFaultPolicy");
+const safetyStateEl = document.getElementById("safetyState");
+const saveRoastSettingsEl = document.getElementById("saveRoastSettings");
+const resetRoastSettingsEl = document.getElementById("resetRoastSettings");
+const roastSettingsMessageEl = document.getElementById("roastSettingsMessage");
+
+function fillRoastSettingsForm(settings) {
+    rorWindowEl.value = settings.rorWindowSeconds;
+    rorSmoothingEl.value = settings.rorSmoothingPoints;
+    dryEndTargetEl.value = settings.dryEndTargetC;
+    firstCrackTargetEl.value = settings.firstCrackTargetC;
+    aucBaseEl.value = settings.aucBaseC;
+}
+
+function renderSafety(safety) {
+    if (!safety || !safetyMaxTempEl) {
+        return;
+    }
+    safetyMaxTempEl.textContent = safety.max_bean_temp_c > 0 ? `${safety.max_bean_temp_c} °C` : "disabled";
+    safetyFaultPolicyEl.textContent = safety.sensor_fault_flame_policy === "min"
+        ? `flame to 0% after ${safety.sensor_fault_flame_after} faults`
+        : "hold current flame";
+    safetyStateEl.textContent = safety.over_temperature_active ? "Over-temp cutoff active" : "Armed";
+    safetyStateEl.classList.toggle("health-fail", Boolean(safety.over_temperature_active));
+}
+
+if (saveRoastSettingsEl) {
+    fillRoastSettingsForm(getRoastSettings());
+
+    saveRoastSettingsEl.addEventListener("click", () => {
+        const next = {
+            rorWindowSeconds: Number(rorWindowEl.value),
+            rorSmoothingPoints: Number(rorSmoothingEl.value),
+            dryEndTargetC: Number(dryEndTargetEl.value),
+            firstCrackTargetC: Number(firstCrackTargetEl.value),
+            aucBaseC: Number(aucBaseEl.value),
+        };
+        const invalid = Object.entries(next).find(([, value]) => !Number.isFinite(value) || value <= 0);
+        if (invalid) {
+            showToast("Every roast setting must be a positive number.", "error");
+            return;
+        }
+        if (next.rorWindowSeconds < 6 || next.rorWindowSeconds > 180) {
+            showToast("RoR window should be between 6 and 180 seconds.", "error");
+            return;
+        }
+        if (next.rorSmoothingPoints > 30) {
+            showToast("RoR smoothing should be 30 samples or fewer.", "error");
+            return;
+        }
+        fillRoastSettingsForm(saveRoastSettings(next));
+        roastSettingsMessageEl.textContent = "Saved on this device. New roast sessions and saved-roast charts use these values.";
+        showToast("Roast settings saved.", "success");
+    });
+
+    resetRoastSettingsEl.addEventListener("click", () => {
+        fillRoastSettingsForm(saveRoastSettings({ ...ROAST_SETTINGS_DEFAULTS }));
+        roastSettingsMessageEl.textContent = "Reset to defaults.";
+    });
 }
 
 renderFlame(Number(flameControlEl.value));

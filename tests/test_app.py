@@ -7,6 +7,18 @@ def test_pages_render(client):
         assert response.status_code == 200
 
 
+def test_roast_session_page_passes_reference_roast_id(client):
+    response = client.get("/roast/session?bean_name=Test&origin=Kenya&weight_grams=350&reference_id=7")
+    assert response.status_code == 200
+    assert b'data-reference-id="7"' in response.data
+
+    # Anything that is not a positive integer is dropped rather than echoed.
+    for bad in ("abc", "-3", "0", "1.5"):
+        response = client.get(f"/roast/session?bean_name=Test&origin=Kenya&reference_id={bad}")
+        assert response.status_code == 200
+        assert b'data-reference-id=""' in response.data
+
+
 def test_lookup_edit_page_renders_for_saved_roast(client):
     create_response = client.post(
         "/api/roasts",

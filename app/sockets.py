@@ -16,12 +16,24 @@ sensor_log_every_n = 10
 sample_counter = 0
 consecutive_read_failures = 0
 
+# Safety limits (see config.py). The flame is cut to 0% once the bean probe
+# reads max_bean_temp_c or hotter, and optionally after a run of faulty reads.
+max_bean_temp_c = 0.0
+sensor_fault_flame_policy = "hold"
+sensor_fault_flame_after = 5
+over_temperature_active = False
+_OVER_TEMP_REARM_MARGIN_C = 5.0
+
 
 def register_socket_handlers(app):
     global sensor_interval_seconds, sensor_service, sensor_log_every_n
+    global max_bean_temp_c, sensor_fault_flame_policy, sensor_fault_flame_after
 
     sensor_interval_seconds = app.config["SENSOR_INTERVAL_SECONDS"]
     sensor_log_every_n = max(1, int(app.config.get("SENSOR_LOG_EVERY_N", 10)))
+    max_bean_temp_c = float(app.config.get("MAX_BEAN_TEMP_C", 0) or 0)
+    sensor_fault_flame_policy = str(app.config.get("SENSOR_FAULT_FLAME_POLICY", "hold") or "hold").lower()
+    sensor_fault_flame_after = max(1, int(app.config.get("SENSOR_FAULT_FLAME_AFTER", 5) or 5))
 
     if sensor_service is None:
         # Saved calibration overrides the env pulse-width defaults.
@@ -97,6 +109,15 @@ def _sensor_tick():
             )
         latest_sample = sample
         _broadcast_sample(sample)
+        if (
+            sensor_fault_flame_policy == "min"
+            and consecutive_read_failures == sensor_fault_flame_after
+        ):
+            _safety_cutoff(
+                "sensor_fault",
+                f"Flame cut to 0% after {consecutive_read_failures} consecutive thermocouple faults.",
+                sample,
+            )
         return
 
     if consecutive_read_failures:
@@ -105,6 +126,7 @@ def _sensor_tick():
 
     latest_sample = sample
     sample_counter += 1
+    _check_over_temperature(sample)
     if sample_counter == 1 or sample_counter % sensor_log_every_n == 0:
         logger.info(
             "Sensor sample #%s temperature=%s source=%s flame_level=%s",
@@ -122,6 +144,73 @@ def _broadcast_sample(sample):
         socketio.emit("sensor_data", sample)
     except Exception:
         logger.exception("Failed to broadcast sensor sample; sensor loop continuing")
+
+
+def _check_over_temperature(sample):
+    """Cut the flame once when the bean probe reaches the configured maximum.
+
+    Re-arms after the temperature falls a few degrees below the limit so a
+    roast that keeps climbing is cut again, but a reading hovering at the
+    limit does not spam cutoffs.
+    """
+    global over_temperature_active
+
+    if max_bean_temp_c <= 0:
+        return
+    temperature = sample.get("temperature")
+    if temperature is None:
+        return
+
+    if temperature >= max_bean_temp_c:
+        if not over_temperature_active:
+            over_temperature_active = True
+            _safety_cutoff(
+                "over_temperature",
+                f"Bean temperature {temperature:.1f} °C reached the {max_bean_temp_c:.0f} °C limit; flame cut to 0%.",
+                sample,
+            )
+    elif temperature < max_bean_temp_c - _OVER_TEMP_REARM_MARGIN_C:
+        over_temperature_active = False
+
+
+def _safety_cutoff(kind, message, sample):
+    """Drop the flame to 0% and tell every client why. Never raises."""
+    try:
+        previous = sensor_service.health_status()["flame_level"]
+        if previous <= 0:
+            return
+        sensor_service.set_flame_level(0)
+        logger.warning("Safety cutoff (%s): %s (flame was %s%%)", kind, message, previous)
+        socketio.emit(
+            "safety_event",
+            {
+                "type": kind,
+                "message": message,
+                "previous_flame_level": previous,
+                "flame_level": 0,
+                "timestamp": sample.get("timestamp"),
+            },
+        )
+        socketio.emit(
+            "sensor_state",
+            {
+                "active": sensor_service.active,
+                "source": sensor_service.source_name,
+                "flame_level": 0,
+                "simulated": sensor_service.source_name == "simulated",
+            },
+        )
+    except Exception:
+        logger.exception("Safety cutoff failed; sensor loop continuing")
+
+
+def safety_settings():
+    return {
+        "max_bean_temp_c": max_bean_temp_c,
+        "sensor_fault_flame_policy": sensor_fault_flame_policy,
+        "sensor_fault_flame_after": sensor_fault_flame_after,
+        "over_temperature_active": over_temperature_active,
+    }
 
 
 @socketio.on("connect")

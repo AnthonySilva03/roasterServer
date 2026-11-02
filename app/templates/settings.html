@@ -97,12 +97,12 @@ data-servo-max="{{ servo_max_pulsewidth }}"
 
             <div class="summary-grid analytics-grid">
                 <div class="summary-block">
-                    <div class="metric-label">Min pulse width — 0% (µs)</div>
+                    <div class="metric-label">Min pulse width, 0% <span class="no-caps">(µs)</span></div>
                     <input id="calMin" type="number" min="400" max="3000" step="10" class="cal-input">
                     <button class="ghost cal-use" type="button" data-target="calMin">Use slider value</button>
                 </div>
                 <div class="summary-block">
-                    <div class="metric-label">Max pulse width — 100% (µs)</div>
+                    <div class="metric-label">Max pulse width, 100% <span class="no-caps">(µs)</span></div>
                     <input id="calMax" type="number" min="400" max="3000" step="10" class="cal-input">
                     <button class="ghost cal-use" type="button" data-target="calMax">Use slider value</button>
                 </div>
@@ -113,6 +113,60 @@ data-servo-max="{{ servo_max_pulsewidth }}"
             </div>
             <div id="calMessage" class="helper-text">Current range comes from the saved calibration or the environment defaults.</div>
         </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div>
+                <h2 class="section-title">Roast Analysis</h2>
+                <p class="helper-text">Rate-of-rise smoothing and the phase target temperatures used for the Dry End / First Crack projections. Stored on this device.</p>
+            </div>
+            <div class="summary-grid analytics-grid">
+                <div class="summary-block">
+                    <div class="metric-label">RoR window (seconds)</div>
+                    <input id="rorWindow" type="number" min="6" max="180" step="1" class="cal-input">
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">RoR smoothing (samples)</div>
+                    <input id="rorSmoothing" type="number" min="1" max="30" step="1" class="cal-input">
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Dry End target (°C)</div>
+                    <input id="dryEndTarget" type="number" min="100" max="200" step="1" class="cal-input">
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">First Crack target (°C)</div>
+                    <input id="firstCrackTarget" type="number" min="150" max="230" step="1" class="cal-input">
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">AUC base temperature (°C)</div>
+                    <input id="aucBase" type="number" min="50" max="220" step="1" class="cal-input">
+                </div>
+            </div>
+            <div class="inline-controls">
+                <button id="saveRoastSettings" class="primary" type="button">Save roast settings</button>
+                <button id="resetRoastSettings" class="ghost" type="button">Reset defaults</button>
+            </div>
+            <div id="roastSettingsMessage" class="helper-text">Defaults: 30 s window, 5-sample smoothing, Dry End 150 °C, First Crack 196 °C, AUC base 150 °C.</div>
+
+            <div>
+                <h2 class="section-title">Safety Limits</h2>
+                <p class="helper-text">Set on the Pi with environment variables; the sensor loop enforces them even if no browser is open.</p>
+            </div>
+            <div class="three-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Max bean temp</div>
+                    <div id="safetyMaxTemp" class="health-value">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">On sensor fault</div>
+                    <div id="safetyFaultPolicy" class="health-value">--</div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Cutoff state</div>
+                    <div id="safetyState" class="health-value">--</div>
+                </div>
+            </div>
+            <p class="helper-text"><code>MAX_BEAN_TEMP_C</code> (0 disables), <code>SENSOR_FAULT_FLAME_POLICY</code> (<code>hold</code> or <code>min</code>), <code>SENSOR_FAULT_FLAME_AFTER</code> (consecutive faults).</p>
+        </aside>
     </section>
 </main>
 {% endblock %}

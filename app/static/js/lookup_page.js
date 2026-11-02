@@ -29,17 +29,152 @@ const detailPhotoWrapEl = document.getElementById("detailPhotoWrap");
 const detailPhotoEl = document.getElementById("detailPhoto");
 const editRoastLinkEl = document.getElementById("editRoastLink");
 const exportRoastLinkEl = document.getElementById("exportRoastLink");
+const exportCsvLinkEl = document.getElementById("exportCsvLink");
+const exportAlogLinkEl = document.getElementById("exportAlogLink");
 const removeRoastButtonEl = document.getElementById("removeRoastButton");
+const detailAucEl = document.getElementById("detailAuc");
+const detailKeyTempsEl = document.getElementById("detailKeyTemps");
+const detailPropertiesEl = document.getElementById("detailProperties");
+
+function keyTempCard(label, value) {
+    return `<div class="key-temp"><div class="metric-label">${escapeHtml(label)}</div><div>${escapeHtml(value)}</div></div>`;
+}
+
+function renderKeyTemperatures(roast) {
+    const temps = buildKeyTemperatures(roast.curve || [], roast.events || [], {
+        startedAt: roast.started_at,
+        endedAt: roast.ended_at,
+    });
+    detailKeyTempsEl.innerHTML = [
+        keyTempCard("Charge", formatTemperature(temps.charge)),
+        keyTempCard("Turning point", temps.turningPoint !== null
+            ? `${formatTemperature(temps.turningPoint)} @ ${formatDuration(temps.turningPointSeconds)}`
+            : "--"),
+        keyTempCard("Dry End", formatTemperature(temps.dryEnd)),
+        keyTempCard("First Crack", formatTemperature(temps.firstCrack)),
+        keyTempCard("Drop", formatTemperature(temps.drop)),
+    ].join("");
+}
+
+function renderRoastProperties(roast) {
+    const number = (value, unit, digits = 1) => (
+        value === null || value === undefined || value === "" || !Number.isFinite(Number(value))
+            ? "--"
+            : `${Number(value).toFixed(digits)}${unit}`
+    );
+    detailPropertiesEl.innerHTML = [
+        keyTempCard("Roasted weight", number(roast.roasted_weight_grams, " g")),
+        keyTempCard("Weight loss", number(roast.weight_loss_percent, "%")),
+        keyTempCard("Colour", roast.roast_color || "--"),
+        keyTempCard("Batch", roast.batch_label || "--"),
+        keyTempCard("Green moisture", number(roast.green_moisture_percent, "%")),
+        keyTempCard("Ambient", number(roast.ambient_temp_c, " °C")),
+    ].join("");
+}
+
+const lookupPhaseSummaryEl = document.getElementById("lookupPhaseSummary");
+const compareSelectEl = document.getElementById("compareSelect");
+const comparePhaseSummaryEl = document.getElementById("comparePhaseSummary");
 
 const lookupTemperatureChart = createLineChart(
     "lookupTemperatureChart",
     "Saved Temperature",
     "#b4542b"
 );
+enableRorOverlay(lookupTemperatureChart);
+enableFlameOverlay(lookupTemperatureChart);
+enableReferenceOverlay(lookupTemperatureChart);
 
 let selectedRoastId = null;
 let lookupItems = [];
 let selectedOriginKey = null;
+let compareRoastId = null;
+let primaryStageMarkers = [];
+
+// --- Roast comparator: overlay a second saved roast aligned at Charge ---------
+
+function renderCompareOptions() {
+    if (!compareSelectEl) {
+        return;
+    }
+    const current = compareSelectEl.value;
+    compareSelectEl.innerHTML = '<option value="">None</option>';
+    lookupItems
+        .filter((item) => item.id !== selectedRoastId && Number(item.sample_count) > 0)
+        .forEach((item) => {
+            const option = document.createElement("option");
+            option.value = String(item.id);
+            option.textContent = `#${item.id} ${item.bean_name} · ${item.roast_level}`;
+            compareSelectEl.appendChild(option);
+        });
+    compareSelectEl.value = lookupItems.some((item) => String(item.id) === current && item.id !== selectedRoastId)
+        ? current
+        : "";
+    if (!compareSelectEl.value) {
+        clearCompareOverlay();
+    }
+}
+
+function clearCompareOverlay() {
+    compareRoastId = null;
+    setReferenceSeries(lookupTemperatureChart, { temperature: [], flame: [] });
+    setStageMarkers(lookupTemperatureChart, primaryStageMarkers);
+    if (comparePhaseSummaryEl) {
+        comparePhaseSummaryEl.style.display = "none";
+        comparePhaseSummaryEl.textContent = "";
+    }
+}
+
+async function loadCompareRoast(roastId) {
+    const response = await fetch(`/api/roasts/${roastId}`);
+    if (!response.ok) {
+        throw new Error("Unable to load comparison roast.");
+    }
+    const roast = await response.json();
+    if (compareSelectEl && String(roastId) !== compareSelectEl.value) {
+        return; // selection changed while loading
+    }
+    compareRoastId = roast.id;
+    const options = { startedAt: roast.started_at, endedAt: roast.ended_at };
+    const baseTime = resolveChartBaseTime(roast.curve || [], options);
+    setReferenceSeries(lookupTemperatureChart, {
+        temperature: buildChartSeries(roast.curve || [], options),
+        flame: buildFlameSeries(roast.curve || [], options),
+    });
+    const markers = (roast.events || [])
+        .filter((event) => ["Dry End", "First Crack", "First Crack End", "Second Crack", "Drop", "Finish"].includes(event.label))
+        .map((event) => ({
+            label: toElapsedMinutes(event.time, baseTime, roast.started_at),
+            text: `#${roast.id} ${event.label}`,
+            color: "rgba(126, 164, 255, 0.7)",
+            style: "reference",
+        }))
+        .filter((marker) => Number.isFinite(marker.label));
+    setStageMarkers(lookupTemperatureChart, [...markers, ...primaryStageMarkers]);
+
+    const phases = buildRoastPhases(roast.curve || [], roast.events || [], options);
+    const phaseText = (phases.phases || [])
+        .map((phase) => `${phase.label} ${formatDuration(phase.seconds)} (${formatPercent(phase.percent)})`)
+        .join(" · ");
+    if (comparePhaseSummaryEl) {
+        comparePhaseSummaryEl.style.display = "";
+        comparePhaseSummaryEl.textContent = `Comparing with #${roast.id} ${roast.bean_name}: total ${formatDuration(phases.totalSeconds)}${phaseText ? ` · ${phaseText}` : ""}`;
+    }
+}
+
+if (compareSelectEl) {
+    compareSelectEl.addEventListener("change", () => {
+        const roastId = Number(compareSelectEl.value || 0);
+        if (!roastId) {
+            clearCompareOverlay();
+            return;
+        }
+        loadCompareRoast(roastId).catch(() => {
+            showToast("Unable to load the comparison roast.", "error");
+            clearCompareOverlay();
+        });
+    });
+}
 
 function roastMatchesSearch(item, query) {
     if (!query) {
@@ -260,25 +395,46 @@ function setLookupDetail(roast) {
         ? `Development lasted ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`
         : "First crack was not marked for this roast, so development metrics are incomplete.";
     detailNotesEl.textContent = roast.notes || "No notes recorded.";
+    detailAucEl.textContent = formatAuc(analytics.auc);
+    renderKeyTemperatures(roast);
+    renderRoastProperties(roast);
     editRoastLinkEl.href = `/lookup/${roast.id}/edit`;
     if (exportRoastLinkEl) {
         exportRoastLinkEl.href = `/api/roasts/${roast.id}/export`;
         exportRoastLinkEl.style.display = "";
+    }
+    if (exportCsvLinkEl) {
+        exportCsvLinkEl.href = `/api/roasts/${roast.id}/export.csv`;
+        exportCsvLinkEl.style.display = "";
+    }
+    if (exportAlogLinkEl) {
+        exportAlogLinkEl.href = `/api/roasts/${roast.id}/export.alog`;
+        exportAlogLinkEl.style.display = "";
     }
     removeRoastButtonEl.disabled = false;
     removeRoastButtonEl.dataset.roastId = String(roast.id);
     removeRoastButtonEl.dataset.roastName = roast.bean_name || `Roast #${roast.id}`;
     renderLookupEvents(roast.events || []);
 
+    const chartOptions = {
+        startedAt: roast.started_at,
+        endedAt: roast.ended_at,
+    };
     fillLookupChart(
         lookupTemperatureChart,
-        buildChartSeries(roast.curve || [], {
-            startedAt: roast.started_at,
-            endedAt: roast.ended_at,
-        }),
+        buildChartSeries(roast.curve || [], chartOptions),
         (point) => Number(point.y)
     );
+    setRorSeries(lookupTemperatureChart, buildRorSeries(roast.curve || [], chartOptions));
+    setFlameSeries(lookupTemperatureChart, buildFlameSeries(roast.curve || [], chartOptions));
+    setPhaseBands(lookupTemperatureChart, buildPhaseBands(analytics.phases));
+    renderPhaseSummary(lookupPhaseSummaryEl, analytics.phases);
+    primaryStageMarkers = [];
     setStageMarkers(lookupTemperatureChart, []);
+    renderCompareOptions();
+    if (compareRoastId && compareRoastId !== roast.id) {
+        loadCompareRoast(compareRoastId).catch(() => clearCompareOverlay());
+    }
     setStageBadges(
         lookupTemperatureChart,
         buildEventBadges(roast.events || [])
@@ -316,11 +472,16 @@ function clearLookupDetail(copy) {
     detailTasteNotesEl.textContent = "Taste notes can be added from the post-roast edit page.";
     detailAnalyticsCopyEl.textContent = "Select a saved roast to restore analytics and chart detail.";
     detailNotesEl.textContent = "No roast selected.";
+    detailAucEl.textContent = "--";
+    detailKeyTempsEl.innerHTML = "";
+    detailPropertiesEl.innerHTML = "";
     editRoastLinkEl.href = "/lookup";
-    if (exportRoastLinkEl) {
-        exportRoastLinkEl.href = "/lookup";
-        exportRoastLinkEl.style.display = "none";
-    }
+    [exportRoastLinkEl, exportCsvLinkEl, exportAlogLinkEl].forEach((link) => {
+        if (link) {
+            link.href = "/lookup";
+            link.style.display = "none";
+        }
+    });
     removeRoastButtonEl.disabled = true;
     delete removeRoastButtonEl.dataset.roastId;
     delete removeRoastButtonEl.dataset.roastName;
@@ -328,8 +489,15 @@ function clearLookupDetail(copy) {
     detailPhotoEl.removeAttribute("src");
     detailPhotoWrapEl.style.display = "none";
     fillLookupChart(lookupTemperatureChart, [], (point) => Number(point.y));
+    setRorSeries(lookupTemperatureChart, []);
+    setFlameSeries(lookupTemperatureChart, []);
+    setPhaseBands(lookupTemperatureChart, []);
+    renderPhaseSummary(lookupPhaseSummaryEl, null);
+    primaryStageMarkers = [];
     setStageMarkers(lookupTemperatureChart, []);
     setStageBadges(lookupTemperatureChart, []);
+    clearCompareOverlay();
+    renderCompareOptions();
 }
 
 function renderLookupView() {
@@ -372,6 +540,14 @@ async function loadLookupPage() {
     const summaryPayload = await summaryResponse.json();
 
     lookupItems = listPayload.items || [];
+
+    // Deep link from the report page: /lookup?roast=<id>
+    const requested = Number(new URLSearchParams(window.location.search).get("roast") || 0);
+    if (requested && selectedRoastId === null && lookupItems.some((item) => item.id === requested)) {
+        selectedRoastId = requested;
+        await loadRoastDetail(requested);
+    }
+
     renderLookupView();
     setLookupSummary(summaryPayload);
 

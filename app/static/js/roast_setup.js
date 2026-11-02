@@ -1,4 +1,5 @@
 const roastHistoryEl = document.getElementById("roastHistory");
+const referenceSelectEl = document.getElementById("referenceSelect");
 
 function formatRoastDate(dateString) {
     const date = new Date(dateString);
@@ -32,10 +33,33 @@ function renderRoastHistory(items) {
     `).join("");
 }
 
+// Reference roast picker: any saved roast with a curve can be followed.
+function renderReferenceOptions(items) {
+    if (!referenceSelectEl) {
+        return;
+    }
+    const options = items
+        .filter((item) => Number(item.sample_count) > 0)
+        .map((item) => {
+            const option = document.createElement("option");
+            option.value = String(item.id);
+            const duration = item.total_roast_seconds !== null && item.total_roast_seconds !== undefined
+                ? formatDuration(item.total_roast_seconds)
+                : "--";
+            option.textContent = `#${item.id} ${item.bean_name} · ${item.roast_level} · ${duration} · ${formatRoastDate(item.created_at)}`;
+            return option;
+        });
+    options.forEach((option) => referenceSelectEl.appendChild(option));
+}
+
 async function loadRoastHistory() {
     const response = await fetch("/api/roasts");
     const payload = await response.json();
     renderRoastHistory(payload.items || []);
+
+    const allResponse = await fetch("/api/roasts?limit=all");
+    const allPayload = allResponse.ok ? await allResponse.json() : payload;
+    renderReferenceOptions(allPayload.items || payload.items || []);
 }
 
 loadRoastHistory().catch(() => {

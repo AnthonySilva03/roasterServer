@@ -1,3 +1,5 @@
+import re
+
 from app.services import sensor_service as sensor_module
 from app.services.sensor_service import SensorService
 
@@ -50,6 +52,14 @@ def test_simulated_sensor_sample_shape():
         "flame_level",
     }
     assert 188.0 <= sample["temperature"] <= 225.0
+    assert re.fullmatch(r"\d{2}:\d{2}:\d{2}\.\d{3}", sample["timestamp"])
+
+
+def test_sample_timestamp_has_milliseconds_and_rounds_safely():
+    assert sensor_module._sample_timestamp(1_700_000_000.250).endswith(".250")
+    # Rounding 0.9996 s carries into the next second instead of emitting ".1000".
+    assert sensor_module._sample_timestamp(1_700_000_000.9996).endswith(".000")
+    assert re.fullmatch(r"\d{2}:\d{2}:\d{2}\.\d{3}", sensor_module._sample_timestamp())
 
 
 def test_pigpio_max6675_temperature_read(monkeypatch):
