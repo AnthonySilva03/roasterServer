@@ -18,11 +18,15 @@ const photoInputEl = document.getElementById("photoInput");
 const photoPreviewWrapEl = document.getElementById("photoPreviewWrap");
 const photoPreviewEl = document.getElementById("photoPreview");
 
+const reviewPhaseSummaryEl = document.getElementById("reviewPhaseSummary");
+
 const reviewTemperatureChart = createLineChart(
     "reviewTemperatureChart",
     "Roast Review Temperature",
     "#b4542b"
 );
+enableRorOverlay(reviewTemperatureChart);
+enableFlameOverlay(reviewTemperatureChart);
 
 let pendingRoast = null;
 
@@ -32,6 +36,10 @@ function renderPendingRoast() {
         reviewSubtitleEl.textContent = "Return to the roast page to begin a session.";
         reviewAnalyticsCopyEl.textContent = "No analytics are available because no roast is waiting for review.";
         setChartSeries(reviewTemperatureChart, []);
+        setRorSeries(reviewTemperatureChart, []);
+        setFlameSeries(reviewTemperatureChart, []);
+        setPhaseBands(reviewTemperatureChart, []);
+        renderPhaseSummary(reviewPhaseSummaryEl, null);
         return;
     }
 
@@ -68,13 +76,15 @@ function renderPendingRoast() {
         ? `This review includes the graph that will be saved. Development ran ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`
         : "First crack was not marked, so development metrics are limited for this roast.";
 
-    setChartSeries(
-        reviewTemperatureChart,
-        buildChartSeries(pendingRoast.curve || [], {
-            startedAt: pendingRoast.started_at,
-            endedAt: pendingRoast.ended_at,
-        })
-    );
+    const chartOptions = {
+        startedAt: pendingRoast.started_at,
+        endedAt: pendingRoast.ended_at,
+    };
+    setChartSeries(reviewTemperatureChart, buildChartSeries(pendingRoast.curve || [], chartOptions));
+    setRorSeries(reviewTemperatureChart, buildRorSeries(pendingRoast.curve || [], chartOptions));
+    setFlameSeries(reviewTemperatureChart, buildFlameSeries(pendingRoast.curve || [], chartOptions));
+    setPhaseBands(reviewTemperatureChart, buildPhaseBands(analytics.phases));
+    renderPhaseSummary(reviewPhaseSummaryEl, analytics.phases);
     setStageMarkers(reviewTemperatureChart, []);
     setStageBadges(
         reviewTemperatureChart,

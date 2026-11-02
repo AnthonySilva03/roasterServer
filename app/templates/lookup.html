@@ -92,10 +92,20 @@
                 <div class="lookup-chart-header">
                     <div>
                         <h3 class="chart-title">Saved Temperature Curve</h3>
-                        <p class="helper-text">The chart leads the roast detail view so stage timing and temperature shape are easier to read.</p>
+                        <p class="helper-text">Bean temperature with rate of rise, flame steps, and phase bands. Pick a second roast to overlay it, aligned at Charge.</p>
                     </div>
+                    <label class="lookup-compare">
+                        Compare with
+                        <select id="compareSelect">
+                            <option value="">None</option>
+                        </select>
+                    </label>
                 </div>
                 <canvas id="lookupTemperatureChart"></canvas>
+                <div id="comparePhaseSummary" class="helper-text" style="display:none;"></div>
+                <div id="lookupPhaseSummary" class="phase-summary">
+                    <div class="empty-state">Phase breakdown appears after Charge is marked.</div>
+                </div>
             </article>
 
             <div class="summary-grid analytics-grid">

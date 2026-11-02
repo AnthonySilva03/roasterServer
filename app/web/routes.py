@@ -59,6 +59,10 @@ def roast_session_page():
     origin = request.args.get("origin", "").strip()
     roast_level = request.args.get("roast_level", "Medium").strip() or "Medium"
     weight_grams = request.args.get("weight_grams", "").strip()
+    # Optional saved roast to overlay as a reference curve; ignore anything
+    # that is not a positive integer id.
+    reference_id = request.args.get("reference_id", "").strip()
+    reference_id = reference_id if reference_id.isdigit() and int(reference_id) > 0 else ""
 
     current_app.logger.info(
         "Rendered roast session page",
@@ -67,6 +71,7 @@ def roast_session_page():
             "origin": origin or "Unknown origin",
             "roast_level": roast_level,
             "weight_grams": weight_grams or "--",
+            "reference_id": reference_id or "--",
         },
     )
 
@@ -77,6 +82,7 @@ def roast_session_page():
         origin=origin,
         roast_level=roast_level,
         weight_grams=weight_grams,
+        reference_id=reference_id,
     )
 
 

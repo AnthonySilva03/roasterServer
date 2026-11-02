@@ -1222,3 +1222,151 @@ canvas {
     font-size: 0.85rem;
     padding: 6px 10px;
 }
+
+/* --- Roast session LCD readouts ------------------------------------------- */
+.lcd-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+}
+
+.lcd {
+    display: grid;
+    gap: 4px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(7, 11, 22, 0.9), rgba(7, 11, 22, 0.6));
+    text-align: center;
+}
+
+.lcd-value {
+    font-size: 2.4rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    color: var(--accent-dark);
+}
+
+.lcd-value.lcd-warn {
+    color: #ff9d9d;
+}
+
+.lcd-unit {
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+/* --- Phase bar + table ---------------------------------------------------- */
+.phase-summary {
+    margin-top: 14px;
+    display: grid;
+    gap: 10px;
+}
+
+.phase-projection {
+    margin-top: 10px;
+}
+
+.phase-bar {
+    display: flex;
+    width: 100%;
+    height: 26px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.phase-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.phase-rows {
+    display: grid;
+    gap: 4px;
+}
+
+.phase-row {
+    display: grid;
+    grid-template-columns: 14px 1.4fr 1fr 0.7fr 0.8fr 1fr;
+    gap: 8px;
+    align-items: center;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.phase-row-head {
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.phase-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.phase-name {
+    font-weight: 600;
+}
+
+.control-span {
+    grid-column: 1 / -1;
+}
+
+.field-span {
+    grid-column: 1 / -1;
+}
+
+.lookup-compare {
+    min-width: 240px;
+    flex: 0 0 auto;
+}
+
+/* --- Alarms ----------------------------------------------------------------- */
+.alarm-item.alarm-disabled {
+    opacity: 0.55;
+}
+
+.alarm-item.alarm-fired {
+    border-color: rgba(241, 201, 107, 0.5);
+}
+
+.alarm-actions {
+    margin-top: 8px;
+}
+
+.alarm-actions button {
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    min-height: 36px;
+}
+
+@media (max-width: 720px) {
+    .lcd-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .lcd-value {
+        font-size: 1.9rem;
+    }
+
+    .phase-row {
+        grid-template-columns: 14px 1.2fr 1fr 0.8fr;
+    }
+
+    .phase-row > :nth-child(5),
+    .phase-row > :nth-child(6) {
+        display: none;
+    }
+}

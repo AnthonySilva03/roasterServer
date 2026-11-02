@@ -6,6 +6,7 @@ data-bean-name="{{ bean_name }}"
 data-origin="{{ origin }}"
 data-roast-level="{{ roast_level }}"
 data-weight-grams="{{ weight_grams }}"
+data-reference-id="{{ reference_id }}"
 {% endblock %}
 
 {% block content %}
@@ -27,13 +28,51 @@ data-weight-grams="{{ weight_grams }}"
             <div class="status-pill">Source: <span id="sensorSource">Unknown</span></div>
             <div class="status-pill">Updated: <span id="lastUpdated">Waiting for data</span></div>
             <div class="status-pill">Current temp: <span id="temperatureValue">--.- °C</span></div>
+            <div class="status-pill">Reference: <span id="referenceSummary">none</span></div>
         </aside>
+    </section>
+
+    <section class="panel panel-pad lcd-strip" aria-label="Live roast readouts">
+        <div class="lcd">
+            <div class="metric-label">Bean Temp</div>
+            <div id="lcdTemperature" class="lcd-value">--.-</div>
+            <div class="lcd-unit">°C</div>
+        </div>
+        <div class="lcd">
+            <div class="metric-label">Rate of Rise</div>
+            <div id="lcdRor" class="lcd-value">--</div>
+            <div class="lcd-unit">°C/min</div>
+        </div>
+        <div class="lcd">
+            <div class="metric-label">Since Charge</div>
+            <div id="lcdElapsed" class="lcd-value">--</div>
+            <div class="lcd-unit">mm:ss</div>
+        </div>
+        <div class="lcd">
+            <div class="metric-label">Since First Crack</div>
+            <div id="lcdSinceFirstCrack" class="lcd-value">--</div>
+            <div class="lcd-unit">mm:ss</div>
+        </div>
+        <div class="lcd">
+            <div class="metric-label">Development Ratio</div>
+            <div id="lcdDtr" class="lcd-value">--</div>
+            <div class="lcd-unit">of total</div>
+        </div>
+        <div class="lcd" id="lcdReferenceBlock" style="display:none;">
+            <div class="metric-label">vs Reference</div>
+            <div id="lcdReferenceDelta" class="lcd-value">--</div>
+            <div id="lcdReferenceTiming" class="lcd-unit">--</div>
+        </div>
     </section>
 
     <section class="content-grid wide-left">
         <article class="panel chart-card">
             <h2 class="chart-title">Temperature Graph</h2>
             <canvas id="temperatureChart"></canvas>
+            <div id="phaseProjection" class="helper-text phase-projection">Mark Charge to start phase tracking.</div>
+            <div id="phaseSummary" class="phase-summary">
+                <div class="empty-state">Phase breakdown appears after Charge is marked.</div>
+            </div>
         </article>
 
         <aside class="panel panel-pad detail-stack">
@@ -47,13 +86,15 @@ data-weight-grams="{{ weight_grams }}"
             </div>
 
             <div>
-                <h2 class="section-title">Roast Controls</h2>
+                <h2 class="section-title">Roast Events</h2>
                 <div class="control-grid">
                     <button class="secondary" type="button" id="preRoastButton">Pre Roast</button>
-                    <button class="primary" type="button" id="startRoastButton">Start</button>
+                    <button class="primary" type="button" id="startRoastButton">Charge</button>
+                    <button class="ghost" type="button" id="dryEndButton">Dry End</button>
                     <button class="ghost" type="button" id="firstCrackButton">First Crack</button>
+                    <button class="ghost" type="button" id="firstCrackEndButton">FC End</button>
                     <button class="ghost" type="button" id="secondCrackButton">Second Crack</button>
-                    <button class="primary" type="button" id="finishRoastButton">Finish</button>
+                    <button class="primary control-span" type="button" id="finishRoastButton">Drop &amp; Finish</button>
                 </div>
             </div>
 
@@ -105,6 +146,77 @@ data-weight-grams="{{ weight_grams }}"
     </section>
 
     <section class="content-grid wide-left">
+        <article class="panel panel-pad detail-stack" id="alarmPanel">
+            <div>
+                <h2 class="section-title">Alarms</h2>
+                <p class="helper-text">Each alarm fires once per roast when its condition is met. Alarms are saved on this device.</p>
+            </div>
+            <div id="alarmList" class="history-list">
+                <div class="empty-state">No alarms configured.</div>
+            </div>
+            <form id="alarmForm" class="alarm-form detail-stack">
+                <div class="field-grid">
+                    <label>
+                        When
+                        <select id="alarmSource">
+                            <option value="temperature_above">Bean temp reaches (°C)</option>
+                            <option value="temperature_below">Bean temp falls below (°C)</option>
+                            <option value="ror_below">Rate of rise falls below (°C/min)</option>
+                            <option value="ror_above">Rate of rise rises above (°C/min)</option>
+                            <option value="time_after">Time after event reaches (seconds)</option>
+                        </select>
+                    </label>
+                    <label>
+                        Value
+                        <input id="alarmValue" type="number" step="0.5" required placeholder="190">
+                    </label>
+                    <label>
+                        Active from
+                        <select id="alarmFrom">
+                            <option value="charge">Charge</option>
+                            <option value="dryEnd">Dry End</option>
+                            <option value="firstCrack">First Crack</option>
+                            <option value="any">Any time while recording</option>
+                        </select>
+                    </label>
+                    <label>
+                        Action
+                        <select id="alarmAction">
+                            <option value="notify">Notify</option>
+                            <option value="beep">Notify + beep</option>
+                            <option value="speak">Notify + speak</option>
+                            <option value="flame">Set flame + beep</option>
+                        </select>
+                    </label>
+                    <label id="alarmFlameField" style="display:none;">
+                        Flame level (%)
+                        <input id="alarmFlame" type="number" min="0" max="100" step="5" value="50">
+                    </label>
+                    <label>
+                        Message (optional)
+                        <input id="alarmMessage" type="text" maxlength="120" placeholder="Drop the flame to 40%">
+                    </label>
+                </div>
+                <div class="inline-controls">
+                    <button class="secondary" type="submit">Add alarm</button>
+                    <button class="ghost" type="button" id="alarmTestSound">Test sound</button>
+                </div>
+            </form>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="summary-block">
+                <div class="metric-label">How alarms work</div>
+                <div class="detail-copy">
+                    Conditions are checked on every sensor sample. "Active from" delays the alarm until that event is marked,
+                    so a 190 °C alarm from First Crack will not fire during drying. "Set flame" moves the servo and logs the change
+                    as a roast event. Speech uses the browser's voice, so it works offline.
+                </div>
+            </div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
         <article class="panel panel-pad detail-stack" id="roastHardwarePanel">
             <div>
                 <h2 class="section-title">Hardware Health</h2>
@@ -145,5 +257,6 @@ data-weight-grams="{{ weight_grams }}"
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/roast_alarms.js') }}"></script>
 <script src="{{ url_for('static', filename='js/roast_session.js') }}"></script>
 {% endblock %}

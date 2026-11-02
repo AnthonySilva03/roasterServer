@@ -36,11 +36,14 @@ app/static/js/dashboard.js   Dashboard calendar, origin map markers, health pane
 app/static/js/roast_session.js  Active roast logic, stage events, hardware polling
 app/static/js/lookup_page.js    Saved roast detail, origin filter, chart, photo
 app/static/js/roast_review.js   Pending roast review and save/cancel logic
+app/static/js/roast_alarms.js   User alarms: localStorage store, pure evaluator, beep/speech
 
 config.py                    All env-var defaults
 tests/test_app.py            Integration tests: routes, roast API, photo handling
 tests/test_sensor_service.py Unit tests: sensor modes, servo, health
 tests/test_sockets.py        Unit tests: sensor loop tick resilience
+tests/test_frontend_js.py    node --check every static JS file + runs tests/js/*.test.js (skips without node)
+tests/js/live_charts.test.js Node unit tests for RoR, phases, projections, alarms
 ```
 
 ## Architecture in One Paragraph
@@ -69,7 +72,17 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before touching disk or DB, then writes all photos and inserts all rows in one transaction (`save_roast_sessions`); any failure removes the written photos and imports nothing. Incoming `id`s are dropped and fresh ones assigned. `create_roast` and `import_roasts` share `_normalize_roast_payload`, which also type-checks `curve` (list of `{timestamp: str, temperature: finite number}`), `events` (list of objects with a non-empty `label`), `notes`/`taste_notes` (text or null), and `rating` (1–5 or null), coercing numeric strings in place so a bad record is a 400, never a 500.
 
-**Rate-of-rise & turn point** — Client-side only, in `live_charts.js`. `buildRorSeries(curve, {windowSeconds})` returns smoothed RoR points; `enableRorOverlay(chart)` adds a second dataset on the right-hand `y1` axis (temperature stays dataset 0 so `stageMarkerPlugin` is unaffected). `detectTurningPoint(curve, {startedAt, riseThreshold})` returns the confirmed post-charge minimum, drawn as a stage marker by `rebuildStageMarkers` in `roast_session.js`. No server storage — these are derived from the saved curve.
+**Rate-of-rise & turn point** — Client-side only, in `live_charts.js`. `buildRorSeries(curve, {windowSeconds, smoothingPoints})` fits a least-squares slope over the trailing window (no points until half a window of history exists) and then applies a trailing moving average; defaults come from `getRoastSettings()`. `enableRorOverlay(chart)` adds a dataset tagged `roasterRole: "ror"` on the right-hand `y1` axis (temperature stays dataset 0 so `stageMarkerPlugin` is unaffected; every overlay is found by role via `findDataset`, never by index). `detectTurningPoint(curve, {startedAt, riseThreshold})` returns the confirmed post-charge minimum, drawn as a stage marker by `rebuildStageMarkers` in `roast_session.js`. No server storage — these are derived from the saved curve. Sensor timestamps are `HH:MM:SS.mmm` (`_sample_timestamp()` in `sensor_service.py`); `parseRoastTimestamp` accepts both with and without the millisecond suffix.
+
+**Roast events & phases** — Session buttons mark `Pre Roast`, `Charge`, `Dry End`, `First Crack`, `First Crack End`, `Second Crack`, `Drop`. `ROAST_EVENT_ROLES` / `findRoastEvent(events, role)` in `live_charts.js` map roles to labels and still accept the legacy `Start`/`Finish` labels from older saved roasts — always look events up by role, never by literal label. `buildRoastPhases(curve, events, {startedAt, endedAt})` returns Artisan's three phases (drying = Charge→Dry End, Maillard = Dry End→First Crack, development = First Crack→Drop; merged "Drying + Maillard" when Dry End is missing) with seconds, percent, ΔT and average RoR, plus `dtr`. `buildPhaseBands()` feeds the `phaseBandPlugin` (green/yellow/brown bands behind the curve) and `renderPhaseSummary(el, phases)` draws the shared phase bar + table used by the session, review and lookup pages. The session page also shows LCD readouts (`.lcd-strip`) and a Dry End / First Crack ETA from `projectSecondsToTemperature()` against the target temps in roast settings.
+
+**Flame step curve** — `enableFlameOverlay(chart)` + `setFlameSeries(chart, buildFlameSeries(curve))` draw the per-sample `flame_level` as a `stepped: "after"` dataset on a hidden `y2` axis (0–320 so it sits under the bean curve); `flameStepLabelPlugin` labels each step change with its percentage. Enabled on the session, review and lookup charts.
+
+**Reference roast overlay** — The setup page offers a `reference_id` (any saved roast with samples); `roast_session_page` validates it as a positive integer and exposes it as `data-reference-id`. `roast_session.js` fetches `/api/roasts/<id>`, draws it via `enableReferenceOverlay` / `setReferenceSeries` (faint temperature + dashed flame, both aligned at Charge), adds `style: "reference"` stage markers (dotted, labelled at the bottom), shows a live "vs Reference" LCD (ΔT at the same elapsed time, and seconds ahead/behind to reach the current temperature, searched after the reference's turn point), and pops a toast cue when the live roast reaches the time of each reference event/flame change (Artisan's playback aid). The reference id is kept in the roast draft so a resumed roast reloads it. The lookup page reuses the same overlay as a "Compare with" comparator.
+
+**Alarms** — `roast_alarms.js` stores alarms per device in `localStorage` (`roasterAlarms`): `{source, value, fromEvent, action, flameLevel, message, enabled}`. Sources: bean temp ≥/≤, RoR ≤/≥, time after event. `fromEvent` gates the alarm until that event is marked (`charge`/`dryEnd`/`firstCrack`/`any`). `evaluateRoastAlarm(alarm, {temperature, ror, now, eventTimes})` is pure (null readings never compare as 0); `roast_session.js` evaluates on every sample and every 1 s tick, fires once per roast (`firedAlarmIds`, reset in `beginRecording`, persisted in the draft), and actions are toast/notification, WebAudio beep, `speechSynthesis`, or `applyFlameLevel(level, {source: "alarm"})` which moves the servo and logs a `Flame Change` event. Every fired alarm also logs an `Alarm` event.
+
+**Roast settings** — `getRoastSettings()` / `saveRoastSettings()` in `live_charts.js` keep per-device values in `localStorage` (`roasterSettings`): `rorWindowSeconds`, `rorSmoothingPoints`, `dryEndTargetC`, `firstCrackTargetC`. Edited on the settings page ("Roast Analysis" panel). Nothing server-side.
 
 **Toasts** — `toast.js` exposes a global `showToast(message, type)` (`success`/`error`/`info`); it's loaded in `base.html` before `live_charts.js` and renders into `#toastRegion`. Used alongside (not replacing) existing inline messages for save/delete/edit outcomes.
 
@@ -110,7 +123,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 72 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+All tests use an in-memory SQLite DB and disable the background sensor task. 87 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes. Frontend roast math lives in `tests/js/*.test.js` (node's built-in runner, invoked by `tests/test_frontend_js.py`); `live_charts.js` and `roast_alarms.js` export their pure helpers via a `module.exports` guard for this.
 
 ## Common Gotchas
 

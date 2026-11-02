@@ -31,15 +31,109 @@ const editRoastLinkEl = document.getElementById("editRoastLink");
 const exportRoastLinkEl = document.getElementById("exportRoastLink");
 const removeRoastButtonEl = document.getElementById("removeRoastButton");
 
+const lookupPhaseSummaryEl = document.getElementById("lookupPhaseSummary");
+const compareSelectEl = document.getElementById("compareSelect");
+const comparePhaseSummaryEl = document.getElementById("comparePhaseSummary");
+
 const lookupTemperatureChart = createLineChart(
     "lookupTemperatureChart",
     "Saved Temperature",
     "#b4542b"
 );
+enableRorOverlay(lookupTemperatureChart);
+enableFlameOverlay(lookupTemperatureChart);
+enableReferenceOverlay(lookupTemperatureChart);
 
 let selectedRoastId = null;
 let lookupItems = [];
 let selectedOriginKey = null;
+let compareRoastId = null;
+let primaryStageMarkers = [];
+
+// --- Roast comparator: overlay a second saved roast aligned at Charge ---------
+
+function renderCompareOptions() {
+    if (!compareSelectEl) {
+        return;
+    }
+    const current = compareSelectEl.value;
+    compareSelectEl.innerHTML = '<option value="">None</option>';
+    lookupItems
+        .filter((item) => item.id !== selectedRoastId && Number(item.sample_count) > 0)
+        .forEach((item) => {
+            const option = document.createElement("option");
+            option.value = String(item.id);
+            option.textContent = `#${item.id} ${item.bean_name} · ${item.roast_level}`;
+            compareSelectEl.appendChild(option);
+        });
+    compareSelectEl.value = lookupItems.some((item) => String(item.id) === current && item.id !== selectedRoastId)
+        ? current
+        : "";
+    if (!compareSelectEl.value) {
+        clearCompareOverlay();
+    }
+}
+
+function clearCompareOverlay() {
+    compareRoastId = null;
+    setReferenceSeries(lookupTemperatureChart, { temperature: [], flame: [] });
+    setStageMarkers(lookupTemperatureChart, primaryStageMarkers);
+    if (comparePhaseSummaryEl) {
+        comparePhaseSummaryEl.style.display = "none";
+        comparePhaseSummaryEl.textContent = "";
+    }
+}
+
+async function loadCompareRoast(roastId) {
+    const response = await fetch(`/api/roasts/${roastId}`);
+    if (!response.ok) {
+        throw new Error("Unable to load comparison roast.");
+    }
+    const roast = await response.json();
+    if (compareSelectEl && String(roastId) !== compareSelectEl.value) {
+        return; // selection changed while loading
+    }
+    compareRoastId = roast.id;
+    const options = { startedAt: roast.started_at, endedAt: roast.ended_at };
+    const baseTime = resolveChartBaseTime(roast.curve || [], options);
+    setReferenceSeries(lookupTemperatureChart, {
+        temperature: buildChartSeries(roast.curve || [], options),
+        flame: buildFlameSeries(roast.curve || [], options),
+    });
+    const markers = (roast.events || [])
+        .filter((event) => ["Dry End", "First Crack", "First Crack End", "Second Crack", "Drop", "Finish"].includes(event.label))
+        .map((event) => ({
+            label: toElapsedMinutes(event.time, baseTime, roast.started_at),
+            text: `#${roast.id} ${event.label}`,
+            color: "rgba(126, 164, 255, 0.7)",
+            style: "reference",
+        }))
+        .filter((marker) => Number.isFinite(marker.label));
+    setStageMarkers(lookupTemperatureChart, [...markers, ...primaryStageMarkers]);
+
+    const phases = buildRoastPhases(roast.curve || [], roast.events || [], options);
+    const phaseText = (phases.phases || [])
+        .map((phase) => `${phase.label} ${formatDuration(phase.seconds)} (${formatPercent(phase.percent)})`)
+        .join(" · ");
+    if (comparePhaseSummaryEl) {
+        comparePhaseSummaryEl.style.display = "";
+        comparePhaseSummaryEl.textContent = `Comparing with #${roast.id} ${roast.bean_name}: total ${formatDuration(phases.totalSeconds)}${phaseText ? ` · ${phaseText}` : ""}`;
+    }
+}
+
+if (compareSelectEl) {
+    compareSelectEl.addEventListener("change", () => {
+        const roastId = Number(compareSelectEl.value || 0);
+        if (!roastId) {
+            clearCompareOverlay();
+            return;
+        }
+        loadCompareRoast(roastId).catch(() => {
+            showToast("Unable to load the comparison roast.", "error");
+            clearCompareOverlay();
+        });
+    });
+}
 
 function roastMatchesSearch(item, query) {
     if (!query) {
@@ -270,15 +364,25 @@ function setLookupDetail(roast) {
     removeRoastButtonEl.dataset.roastName = roast.bean_name || `Roast #${roast.id}`;
     renderLookupEvents(roast.events || []);
 
+    const chartOptions = {
+        startedAt: roast.started_at,
+        endedAt: roast.ended_at,
+    };
     fillLookupChart(
         lookupTemperatureChart,
-        buildChartSeries(roast.curve || [], {
-            startedAt: roast.started_at,
-            endedAt: roast.ended_at,
-        }),
+        buildChartSeries(roast.curve || [], chartOptions),
         (point) => Number(point.y)
     );
+    setRorSeries(lookupTemperatureChart, buildRorSeries(roast.curve || [], chartOptions));
+    setFlameSeries(lookupTemperatureChart, buildFlameSeries(roast.curve || [], chartOptions));
+    setPhaseBands(lookupTemperatureChart, buildPhaseBands(analytics.phases));
+    renderPhaseSummary(lookupPhaseSummaryEl, analytics.phases);
+    primaryStageMarkers = [];
     setStageMarkers(lookupTemperatureChart, []);
+    renderCompareOptions();
+    if (compareRoastId && compareRoastId !== roast.id) {
+        loadCompareRoast(compareRoastId).catch(() => clearCompareOverlay());
+    }
     setStageBadges(
         lookupTemperatureChart,
         buildEventBadges(roast.events || [])
@@ -328,8 +432,15 @@ function clearLookupDetail(copy) {
     detailPhotoEl.removeAttribute("src");
     detailPhotoWrapEl.style.display = "none";
     fillLookupChart(lookupTemperatureChart, [], (point) => Number(point.y));
+    setRorSeries(lookupTemperatureChart, []);
+    setFlameSeries(lookupTemperatureChart, []);
+    setPhaseBands(lookupTemperatureChart, []);
+    renderPhaseSummary(lookupPhaseSummaryEl, null);
+    primaryStageMarkers = [];
     setStageMarkers(lookupTemperatureChart, []);
     setStageBadges(lookupTemperatureChart, []);
+    clearCompareOverlay();
+    renderCompareOptions();
 }
 
 function renderLookupView() {
