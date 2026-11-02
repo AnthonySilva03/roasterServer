@@ -150,15 +150,15 @@ function renderLookupList(items) {
     }
 
     lookupListEl.innerHTML = items.map((item) => `
-        <button class="lookup-item ${item.id === selectedRoastId ? "active" : ""}" type="button" data-roast-id="${item.id}">
+        <button class="lookup-item ${item.id === selectedRoastId ? "active" : ""}" type="button" data-roast-id="${escapeHtml(item.id)}">
             <div class="lookup-topline">
-                <span>${item.bean_name}</span>
-                <span>${item.roast_level}</span>
+                <span>${escapeHtml(item.bean_name)}</span>
+                <span>${escapeHtml(item.roast_level)}</span>
             </div>
             <div class="lookup-meta">
-                ${item.origin}<br>
-                Saved ${formatLookupDate(item.created_at)}<br>
-                ${item.sample_count} samples
+                ${escapeHtml(item.origin)}<br>
+                Saved ${escapeHtml(formatLookupDate(item.created_at))}<br>
+                ${escapeHtml(item.sample_count)} samples
             </div>
         </button>
     `).join("");
@@ -192,13 +192,13 @@ function renderLookupEvents(events) {
     detailEventsEl.innerHTML = events.map((event) => `
         <article class="history-item">
             <div class="history-topline">
-                <span>${event.label}</span>
-                <span>${formatLookupDate(event.time)}</span>
+                <span>${escapeHtml(event.label)}</span>
+                <span>${escapeHtml(formatLookupDate(event.time))}</span>
             </div>
             <div class="history-meta">
-                ${event.detail || "No details"}<br>
-                ${event.temperature !== null && event.temperature !== undefined ? `Temp ${Number(event.temperature).toFixed(1)} °C` : ""}
-                ${event.flame_level !== null && event.flame_level !== undefined ? `<br>Flame ${event.flame_level}%` : ""}
+                ${escapeHtml(event.detail || "No details")}<br>
+                ${event.temperature !== null && event.temperature !== undefined ? `Temp ${escapeHtml(Number(event.temperature).toFixed(1))} °C` : ""}
+                ${event.flame_level !== null && event.flame_level !== undefined ? `<br>Flame ${escapeHtml(event.flame_level)}%` : ""}
             </div>
         </article>
     `).join("");

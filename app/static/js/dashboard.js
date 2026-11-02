@@ -82,13 +82,13 @@ function renderSelectedOrigin(mappedOrigins) {
     originSelectionListEl.innerHTML = selectedOrigin.roasts.map((roast) => `
         <article class="history-item">
             <div class="history-topline">
-                <span>${roast.bean_name}</span>
-                <span>${roast.roast_level}</span>
+                <span>${escapeHtml(roast.bean_name)}</span>
+                <span>${escapeHtml(roast.roast_level)}</span>
             </div>
             <div class="history-meta">
-                ${roast.origin}<br>
-                Saved ${formatHumanDate(roast.started_at || roast.created_at)}<br>
-                ${roast.sample_count} samples captured
+                ${escapeHtml(roast.origin)}<br>
+                Saved ${escapeHtml(formatHumanDate(roast.started_at || roast.created_at))}<br>
+                ${escapeHtml(roast.sample_count)} samples captured
             </div>
         </article>
     `).join("");
@@ -132,14 +132,14 @@ function renderOriginMap() {
     });
 
     originMapLegendEl.innerHTML = mappedOrigins.map((origin) => `
-        <button class="lookup-item ${origin.key === selectedOriginKey ? "active" : ""}" type="button" data-origin-key="${origin.key}">
+        <button class="lookup-item ${origin.key === selectedOriginKey ? "active" : ""}" type="button" data-origin-key="${escapeHtml(origin.key)}">
             <div class="history-topline">
-                <span>${origin.canonicalLabel}</span>
-                <span>${origin.count} roast${origin.count === 1 ? "" : "s"}</span>
+                <span>${escapeHtml(origin.canonicalLabel)}</span>
+                <span>${escapeHtml(origin.count)} roast${origin.count === 1 ? "" : "s"}</span>
             </div>
             <div class="history-meta">
-                Saved as ${origin.label}<br>
-                Matched by ${origin.aliases.join(", ")}
+                Saved as ${escapeHtml(origin.label)}<br>
+                Matched by ${escapeHtml(origin.aliases.join(", "))}
             </div>
         </button>
     `).join("");
@@ -187,13 +187,13 @@ function renderSelectedDay(groupedRoasts) {
     calendarDayListEl.innerHTML = roasts.map((roast) => `
         <article class="history-item">
             <div class="history-topline">
-                <span>${roast.bean_name}</span>
-                <span>${roast.roast_level}</span>
+                <span>${escapeHtml(roast.bean_name)}</span>
+                <span>${escapeHtml(roast.roast_level)}</span>
             </div>
             <div class="history-meta">
-                ${roast.origin}<br>
-                Started ${new Date(roast.started_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}<br>
-                ${roast.sample_count} samples captured
+                ${escapeHtml(roast.origin)}<br>
+                Started ${escapeHtml(new Date(roast.started_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}<br>
+                ${escapeHtml(roast.sample_count)} samples captured
             </div>
         </article>
     `).join("");

@@ -18,15 +18,15 @@ function renderRoastHistory(items) {
     roastHistoryEl.innerHTML = items.map((item) => `
         <article class="history-item">
             <div class="history-topline">
-                <span>${item.bean_name}</span>
-                <span>${item.roast_level}</span>
+                <span>${escapeHtml(item.bean_name)}</span>
+                <span>${escapeHtml(item.roast_level)}</span>
             </div>
             <div class="history-meta">
-                ${item.origin}<br>
-                Saved ${formatRoastDate(item.created_at)}<br>
-                ${item.weight_grams !== null && item.weight_grams !== undefined ? `${Number(item.weight_grams).toFixed(1)} g` : "Weight --"}<br>
-                ${item.total_roast_seconds !== null && item.total_roast_seconds !== undefined ? `Roast time ${formatDuration(item.total_roast_seconds)}` : "Roast time --"}<br>
-                ${item.sample_count} samples captured
+                ${escapeHtml(item.origin)}<br>
+                Saved ${escapeHtml(formatRoastDate(item.created_at))}<br>
+                ${item.weight_grams !== null && item.weight_grams !== undefined ? `${escapeHtml(Number(item.weight_grams).toFixed(1))} g` : "Weight --"}<br>
+                ${item.total_roast_seconds !== null && item.total_roast_seconds !== undefined ? `Roast time ${escapeHtml(formatDuration(item.total_roast_seconds))}` : "Roast time --"}<br>
+                ${escapeHtml(item.sample_count)} samples captured
             </div>
         </article>
     `).join("");

@@ -109,10 +109,10 @@ function renderPendingRoast() {
     reviewEventsEl.innerHTML = pendingRoast.events.map((event) => `
         <article class="history-item">
             <div class="history-topline">
-                <span>${event.label}</span>
-                <span>${new Date(event.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}</span>
+                <span>${escapeHtml(event.label)}</span>
+                <span>${escapeHtml(new Date(event.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }))}</span>
             </div>
-            <div class="history-meta">${event.detail}</div>
+            <div class="history-meta">${escapeHtml(event.detail)}</div>
         </article>
     `).join("");
 }

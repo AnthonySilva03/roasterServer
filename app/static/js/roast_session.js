@@ -212,10 +212,10 @@ function renderEvents() {
     eventLogEl.innerHTML = roastEvents.map((event) => `
         <article class="history-item">
             <div class="history-topline">
-                <span>${event.label}</span>
-                <span>${event.displayTime}</span>
+                <span>${escapeHtml(event.label)}</span>
+                <span>${escapeHtml(event.displayTime)}</span>
             </div>
-            <div class="history-meta">${event.detail}</div>
+            <div class="history-meta">${escapeHtml(event.detail)}</div>
         </article>
     `).join("");
 }

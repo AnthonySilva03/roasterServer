@@ -471,3 +471,18 @@ function hasSensorTemperature(data) {
     return Boolean(data) && data.temperature !== null && data.temperature !== undefined
         && Number.isFinite(Number(data.temperature));
 }
+
+// Escape text for interpolation into innerHTML templates (text nodes and
+// quoted attribute values). Bean names, origins, notes, and event text are
+// user-entered and can also arrive from imported JSON files.
+function escapeHtml(value) {
+    if (value === null || value === undefined) {
+        return "";
+    }
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}

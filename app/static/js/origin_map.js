@@ -141,7 +141,7 @@ function renderOriginMarkers(containerEl, mappedOrigins, selectedOriginKey, onSe
 
         const icon = L.divIcon({
             className: `origin-marker${isActive ? " active" : ""}`,
-            html: `<span class="origin-marker-dot" style="width:${dotSize}px;height:${dotSize}px;"></span><span class="origin-marker-label">${origin.canonicalLabel}</span>`,
+            html: `<span class="origin-marker-dot" style="width:${dotSize}px;height:${dotSize}px;"></span><span class="origin-marker-label">${escapeHtml(origin.canonicalLabel)}</span>`,
             iconAnchor: [dotSize / 2, dotSize / 2],
             iconSize: null,
         });
