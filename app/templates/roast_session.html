@@ -134,6 +134,10 @@ data-reference-id="{{ reference_id }}"
                     <div class="metric-label">Rate of Rise</div>
                     <div id="analyticsRor" class="summary-number">--</div>
                 </div>
+                <div class="summary-block">
+                    <div class="metric-label">Area Under Curve</div>
+                    <div id="analyticsAuc" class="summary-number">--</div>
+                </div>
             </div>
         </article>
 
@@ -141,6 +145,64 @@ data-reference-id="{{ reference_id }}"
             <div class="summary-block">
                 <div class="metric-label">Analytics Notes</div>
                 <div id="analyticsCopy" class="detail-copy">Start the roast to begin calculating analytics.</div>
+            </div>
+        </aside>
+    </section>
+
+    <section class="content-grid wide-left">
+        <article class="panel panel-pad detail-stack" id="assistPanel">
+            <div>
+                <h2 class="section-title">Flame Assist</h2>
+                <p class="helper-text">Nudges the flame in small steps so the rate of rise tracks a target. You stay in charge: moving the slider pauses it for one interval, and Drop or a safety cutoff switches it off.</p>
+            </div>
+            <div class="field-grid">
+                <label>
+                    Mode
+                    <select id="assistMode">
+                        <option value="fixed">Hold a target RoR</option>
+                        <option value="reference">Follow the reference roast's RoR</option>
+                    </select>
+                </label>
+                <label>
+                    Target RoR (°C/min)
+                    <input id="assistTarget" type="number" min="0" max="60" step="0.5">
+                </label>
+                <label>
+                    Dead band (°C/min)
+                    <input id="assistDeadband" type="number" min="0" max="20" step="0.5">
+                </label>
+                <label>
+                    Step (%)
+                    <input id="assistStep" type="number" min="1" max="50" step="1">
+                </label>
+                <label>
+                    Interval (seconds)
+                    <input id="assistInterval" type="number" min="5" max="300" step="5">
+                </label>
+                <label>
+                    Min flame (%)
+                    <input id="assistMin" type="number" min="0" max="100" step="5">
+                </label>
+                <label>
+                    Max flame (%)
+                    <input id="assistMax" type="number" min="0" max="100" step="5">
+                </label>
+            </div>
+            <div class="inline-controls">
+                <button id="assistToggle" class="primary" type="button">Enable assist</button>
+                <span id="assistStatus" class="assist-status">Off</span>
+            </div>
+            <div id="assistCopy" class="helper-text">Assist acts only while recording, after Charge, and when a rate of rise is available.</div>
+        </article>
+
+        <aside class="panel panel-pad detail-stack">
+            <div class="summary-block">
+                <div class="metric-label">How assist works</div>
+                <div class="detail-copy">
+                    Every interval it compares the smoothed RoR with the target. Below the target minus the dead band it raises the flame by one step;
+                    above it lowers it. It never moves outside the min/max bounds. Gas burners respond slowly, so keep the interval at 20 s or more
+                    and the step small. "Follow the reference" uses the reference roast's RoR at the same elapsed time.
+                </div>
             </div>
         </aside>
     </section>
@@ -258,5 +320,6 @@ data-reference-id="{{ reference_id }}"
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/roast_alarms.js') }}"></script>
+<script src="{{ url_for('static', filename='js/roast_assist.js') }}"></script>
 <script src="{{ url_for('static', filename='js/roast_session.js') }}"></script>
 {% endblock %}

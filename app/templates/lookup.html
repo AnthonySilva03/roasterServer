@@ -84,6 +84,8 @@
                 <div class="inline-controls">
                     <a id="editRoastLink" class="secondary button-link" href="{{ url_for('main.lookup_page') }}">Edit Roast</a>
                     <a id="exportRoastLink" class="ghost button-link" href="{{ url_for('main.lookup_page') }}" download>Export JSON</a>
+                    <a id="exportCsvLink" class="ghost button-link" href="{{ url_for('main.lookup_page') }}" download>Export CSV</a>
+                    <a id="exportAlogLink" class="ghost button-link" href="{{ url_for('main.lookup_page') }}" download>Export for Artisan</a>
                     <button id="removeRoastButton" class="ghost" type="button">Remove Roast</button>
                 </div>
             </div>
@@ -125,9 +127,21 @@
                     <div class="metric-label">Peak Temperature</div>
                     <div id="detailPeakTemperature" class="summary-number">--</div>
                 </div>
+                <div class="summary-block">
+                    <div class="metric-label">Area Under Curve</div>
+                    <div id="detailAuc" class="summary-number">--</div>
+                </div>
             </div>
 
             <div class="lookup-detail-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Key Temperatures</div>
+                    <div id="detailKeyTemps" class="key-temps"></div>
+                </div>
+                <div class="summary-block">
+                    <div class="metric-label">Roast Properties</div>
+                    <div id="detailProperties" class="key-temps"></div>
+                </div>
                 <div class="summary-block">
                     <div class="metric-label">Cup Rating</div>
                     <div id="detailRating" class="summary-number">--</div>

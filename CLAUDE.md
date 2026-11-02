@@ -37,6 +37,10 @@ app/static/js/roast_session.js  Active roast logic, stage events, hardware polli
 app/static/js/lookup_page.js    Saved roast detail, origin filter, chart, photo
 app/static/js/roast_review.js   Pending roast review and save/cancel logic
 app/static/js/roast_alarms.js   User alarms: localStorage store, pure evaluator, beep/speech
+app/static/js/roast_assist.js   RoR flame assist: settings + pure step controller
+app/static/js/reports.js        Ranking report table (sortable, CSV download)
+app/services/roast_math.py      Server-side roast math: timestamps, event roles, phases, AUC, key temps, report rows
+app/templates/reports.html      Ranking report page
 
 config.py                    All env-var defaults
 tests/test_app.py            Integration tests: routes, roast API, photo handling
@@ -82,7 +86,21 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Alarms** — `roast_alarms.js` stores alarms per device in `localStorage` (`roasterAlarms`): `{source, value, fromEvent, action, flameLevel, message, enabled}`. Sources: bean temp ≥/≤, RoR ≤/≥, time after event. `fromEvent` gates the alarm until that event is marked (`charge`/`dryEnd`/`firstCrack`/`any`). `evaluateRoastAlarm(alarm, {temperature, ror, now, eventTimes})` is pure (null readings never compare as 0); `roast_session.js` evaluates on every sample and every 1 s tick, fires once per roast (`firedAlarmIds`, reset in `beginRecording`, persisted in the draft), and actions are toast/notification, WebAudio beep, `speechSynthesis`, or `applyFlameLevel(level, {source: "alarm"})` which moves the servo and logs a `Flame Change` event. Every fired alarm also logs an `Alarm` event.
 
-**Roast settings** — `getRoastSettings()` / `saveRoastSettings()` in `live_charts.js` keep per-device values in `localStorage` (`roasterSettings`): `rorWindowSeconds`, `rorSmoothingPoints`, `dryEndTargetC`, `firstCrackTargetC`. Edited on the settings page ("Roast Analysis" panel). Nothing server-side.
+**Roast settings** — `getRoastSettings()` / `saveRoastSettings()` in `live_charts.js` keep per-device values in `localStorage` (`roasterSettings`): `rorWindowSeconds`, `rorSmoothingPoints`, `dryEndTargetC`, `firstCrackTargetC`, `aucBaseC`. Edited on the settings page ("Roast Analysis" panel). Nothing server-side.
+
+**Roast properties (schema v3)** — `ROAST_PROPERTY_COLUMNS` in `roast_storage.py` defines `roasted_weight_grams`, `roast_color`, `green_moisture_percent`, `batch_label`, `ambient_temp_c`; the INSERT/SELECT/UPDATE statements are built from that tuple, so adding a property means extending it plus `_NUMERIC_PROPERTIES` / `_TEXT_PROPERTIES` in `routes.py`. `_normalize_roast_properties(payload, only_present=…)` validates them for create/import (fills defaults) and PATCH (touches only the fields sent). `weight_loss_percent` is derived on read (list + detail) and never stored. The review page collects them right after the roast (kept on the pending payload), the edit page changes them later, the lookup detail shows them beside the client-side key temperatures (`buildKeyTemperatures`).
+
+**Server-side roast math** — `app/services/roast_math.py` mirrors the client helpers (`parse_timestamp` for `HH:MM:SS[.mmm]`/ISO, `EVENT_ROLES`, `phase_summary`, `area_under_curve`, `key_temperatures`, `roast_report_row`). Keep the two in sync when changing phase or AUC definitions; `tests/test_roast_math.py` and `tests/js/live_charts.test.js` pin the same numbers. **Timezones:** sample stamps are the server's *local* wall clock while event times are UTC ISO instants; both parsers apply the clock to the anchor's local date and convert to UTC (the browser via `setHours`, Python via `astimezone()`), so the Pi and the browser must share a timezone. Test helpers that fabricate clock stamps must derive them from the UTC instant with `.astimezone()`.
+
+**AUC** — Area under the bean curve above `aucBaseC` (default 150 °C) from Dry End (else the turning point, else charge) to drop, trapezoidal, in °C·min. `buildAuc()` client-side (session, review, lookup), `roast_math.area_under_curve()` for the report (`?auc_base=`).
+
+**Exports** — `GET /api/roasts/<id>/export.csv` (elapsed seconds from charge, sample timestamp, bean temp, flame %, event labels attached to the nearest sample) and `GET /api/roasts/<id>/export.alog` (Artisan profile: a Python dict literal with `timex`/`temp2` = bean temp, `temp1` = -1 for the missing environment probe, `timeindex` sample indices for CHARGE/DRYe/FCs/FCe/SCs/SCe/DROP/COOL, flame moves as Burner events with `specialeventsvalue = flame/10 + 1`). Artisan opens it via File › Open; `ast.literal_eval` parses it in tests.
+
+**Ranking report** — `/reports` renders `reports.html`; `reports.js` fetches `GET /api/roasts/report` (one `roast_report_row` per saved roast), sorts client-side, downloads CSV, and deep-links rows to `/lookup?roast=<id>` (handled in `lookup_page.js`).
+
+**Safety cutoffs** — `sockets.py` enforces `MAX_BEAN_TEMP_C` (flame to 0% once the probe reaches it, re-armed 5 °C below) and `SENSOR_FAULT_FLAME_POLICY=min` (flame to 0% after `SENSOR_FAULT_FLAME_AFTER` consecutive faults; `hold` leaves it). `_safety_cutoff()` emits a `safety_event` Socket.IO message plus `sensor_state`; `roast_session.js` logs a `Safety Cutoff` event, beeps, and disables flame assist. `/api/sensor/health` reports the limits under `safety`; the settings page shows them.
+
+**Flame assist** — `roast_assist.js` keeps settings in `localStorage` (`roasterFlameAssist`) and exposes the pure `computeAssistAdjustment({ror, target, currentFlame, settings})`: a step controller (not PID) that moves the flame by `stepPercent` when the smoothed RoR is outside `target ± deadband`, bounded by min/max flame. `roast_session.js` runs it on the 1 s tick once per `intervalSeconds`, only while recording after Charge with a RoR available; any non-assist flame change (slider, alarm) pauses it for one interval, and Drop or a safety cutoff disables it. Target is fixed or the reference roast's RoR at the same elapsed time (`roastReference.rorSeries`).
 
 **Toasts** — `toast.js` exposes a global `showToast(message, type)` (`success`/`error`/`info`); it's loaded in `base.html` before `live_charts.js` and renders into `#toastRegion`. Used alongside (not replacing) existing inline messages for save/delete/edit outcomes.
 
@@ -101,6 +119,9 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 | `MAX6675_DO_PIN` | `9` | GPIO data-out |
 | `SERVO_CONTROL_PIN` | `18` | GPIO for flame servo |
 | `WIFI_SETUP_MODE` | `false` | Enables `/setup/wifi` provisioning page |
+| `MAX_BEAN_TEMP_C` | `250` | Flame cut to 0% at this bean temp; `0` disables |
+| `SENSOR_FAULT_FLAME_POLICY` | `hold` | `min` cuts the flame after repeated thermocouple faults |
+| `SENSOR_FAULT_FLAME_AFTER` | `5` | Consecutive faults before the `min` policy acts |
 
 ## API Surface
 
@@ -111,6 +132,9 @@ GET  /api/roasts/<id>           roast detail with curve + events
 PATCH /api/roasts/<id>          update metadata, notes, rating, tasting notes
 DELETE /api/roasts/<id>         remove roast + photo file
 GET  /api/roasts/<id>/export    download a single roast as portable JSON
+GET  /api/roasts/<id>/export.csv   curve + events as CSV
+GET  /api/roasts/<id>/export.alog  Artisan profile (dict literal) for File › Open in Artisan
+GET  /api/roasts/report         per-roast statistics for the ranking report (?auc_base=150)
 POST /api/roasts/import         restore one or many roasts from exported JSON
 GET  /api/sensor/health         hardware health check (incl. servo pulse-width range)
 POST /api/sensor/calibration    set + persist servo min/max pulse width (flame endpoints)
@@ -123,7 +147,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 87 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes. Frontend roast math lives in `tests/js/*.test.js` (node's built-in runner, invoked by `tests/test_frontend_js.py`); `live_charts.js` and `roast_alarms.js` export their pure helpers via a `module.exports` guard for this.
+All tests use an in-memory SQLite DB and disable the background sensor task. 112 tests currently pass. Extend `test_app.py` for new routes or storage behavior, `test_roast_features.py` for properties/exports/report, `test_roast_math.py` for the server-side math, `test_sockets.py` for the sensor loop and safety cutoffs, and `test_sensor_service.py` for hardware mode changes. Frontend roast math lives in `tests/js/*.test.js` (node's built-in runner, invoked by `tests/test_frontend_js.py`); `live_charts.js`, `roast_alarms.js` and `roast_assist.js` export their pure helpers via a `module.exports` guard for this.
 
 ## Common Gotchas
 

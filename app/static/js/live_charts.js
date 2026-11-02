@@ -10,6 +10,7 @@ const ROAST_SETTINGS_DEFAULTS = Object.freeze({
     rorSmoothingPoints: 5,     // trailing moving-average applied to the RoR
     dryEndTargetC: 150,        // used for the drying-phase ETA projection
     firstCrackTargetC: 196,    // used for the first-crack ETA projection
+    aucBaseC: 150,             // base temperature for area-under-curve
 });
 
 function getRoastSettings() {
@@ -897,6 +898,85 @@ function buildRoastPhases(curve = [], events = [], options = {}) {
     };
 }
 
+// Area under the bean curve above baseTemp (°C·min) from Dry End (else the
+// turning point, else charge) to drop. Same definition as Artisan's AUC and
+// the server-side roast_math.area_under_curve used by the report.
+function buildAuc(curve = [], events = [], options = {}) {
+    const anchorDate = options.anchorDate || options.startedAt || options.endedAt || null;
+    const baseTemp = Number.isFinite(options.baseTemp) ? options.baseTemp : getRoastSettings().aucBaseC;
+    const points = normalizeCurve(curve, options);
+    if (points.length < 2) {
+        return null;
+    }
+    const chargeTime = parseRoastTimestamp(options.startedAt, anchorDate)
+        || parseRoastTimestamp(findRoastEvent(events, "charge")?.time, anchorDate)
+        || points[0].time;
+    const dropTime = parseRoastTimestamp(options.endedAt, anchorDate)
+        || parseRoastTimestamp(findRoastEvent(events, "drop")?.time, anchorDate)
+        || points[points.length - 1].time;
+    let startTime = parseRoastTimestamp(findRoastEvent(events, "dryEnd")?.time, anchorDate);
+    if (!startTime) {
+        const turn = detectTurningPoint(curve, options);
+        startTime = turn ? parseRoastTimestamp(turn.timestamp, anchorDate) : chargeTime;
+    }
+    if (!startTime || !dropTime) {
+        return null;
+    }
+
+    const window = points.filter((point) => point.time >= startTime && point.time <= dropTime);
+    if (window.length < 2) {
+        return null;
+    }
+    let area = 0;
+    for (let i = 1; i < window.length; i += 1) {
+        const minutes = (window[i].time.getTime() - window[i - 1].time.getTime()) / 60000;
+        if (minutes <= 0) {
+            continue;
+        }
+        area += ((Math.max(0, window[i - 1].temperature - baseTemp) + Math.max(0, window[i].temperature - baseTemp)) / 2) * minutes;
+    }
+    return Number(area.toFixed(1));
+}
+
+// Charge / turning point / dry end / first crack / drop temperatures. Event
+// temperatures win when recorded; otherwise the nearest curve sample is used.
+function buildKeyTemperatures(curve = [], events = [], options = {}) {
+    const anchorDate = options.anchorDate || options.startedAt || options.endedAt || null;
+    const points = normalizeCurve(curve, options);
+    const nearest = (time) => {
+        if (!time || !points.length) {
+            return null;
+        }
+        let best = points[0];
+        points.forEach((point) => {
+            if (Math.abs(point.time - time) < Math.abs(best.time - time)) {
+                best = point;
+            }
+        });
+        return Math.abs(best.time - time) <= 15000 ? best.temperature : null;
+    };
+    const fromEvent = (role, fallbackTime) => {
+        const event = findRoastEvent(events, role);
+        const recorded = Number(event?.temperature);
+        if (event && Number.isFinite(recorded)) {
+            return recorded;
+        }
+        const time = event ? parseRoastTimestamp(event.time, anchorDate) : fallbackTime;
+        return nearest(time);
+    };
+    const chargeTime = parseRoastTimestamp(options.startedAt, anchorDate) || null;
+    const dropTime = parseRoastTimestamp(options.endedAt, anchorDate) || null;
+    const turn = detectTurningPoint(curve, options);
+    return {
+        charge: fromEvent("charge", chargeTime),
+        turningPoint: turn ? turn.temperature : null,
+        turningPointSeconds: turn ? turn.x * 60 : null,
+        dryEnd: findRoastEvent(events, "dryEnd") ? fromEvent("dryEnd", null) : null,
+        firstCrack: findRoastEvent(events, "firstCrack") ? fromEvent("firstCrack", null) : null,
+        drop: fromEvent("drop", dropTime),
+    };
+}
+
 function buildPhaseBands(phaseSummary) {
     return (phaseSummary?.phases || [])
         .filter((phase) => Number.isFinite(phase.fromMinutes) && Number.isFinite(phase.toMinutes))
@@ -994,6 +1074,7 @@ function buildRoastAnalytics(curve = [], events = [], options = {}) {
         : null;
 
     const phases = buildRoastPhases(curve, events, options);
+    const auc = buildAuc(curve, events, options);
 
     return {
         totalDurationSeconds,
@@ -1004,7 +1085,16 @@ function buildRoastAnalytics(curve = [], events = [], options = {}) {
         currentTemperature,
         phases,
         rorSeries,
+        auc,
     };
+}
+
+function formatAuc(value) {
+    return Number.isFinite(value) ? `${value.toFixed(0)} °C·min` : "--";
+}
+
+function formatTemperature(value, digits = 0) {
+    return Number.isFinite(value) ? `${value.toFixed(digits)} °C` : "--";
 }
 
 // True when a sensor_data payload carries a real reading. Fault samples from
@@ -1045,6 +1135,8 @@ if (typeof module !== "undefined" && module.exports) {
         projectSecondsToTemperature,
         buildRoastPhases,
         buildPhaseBands,
+        buildAuc,
+        buildKeyTemperatures,
         buildRoastAnalytics,
         formatDuration,
         formatMinutesTick,

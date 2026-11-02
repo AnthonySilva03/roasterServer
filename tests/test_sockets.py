@@ -109,3 +109,96 @@ def test_sensor_tick_broadcasts_fault_samples_and_counts_them(monkeypatch):
     assert sockets_module.consecutive_read_failures == 0
     assert emitted[-1][1]["temperature"] == 180.0
     assert "error" not in emitted[-1][1]
+
+
+class ScriptedSensor:
+    """Returns the given temperatures in order (None = fault) and records flame changes."""
+
+    active = True
+    source_name = "pigpio-max6675"
+
+    def __init__(self, temperatures):
+        self.temperatures = list(temperatures)
+        self.flame_level = 60
+        self.flame_changes = []
+
+    def read_sample(self):
+        temperature = self.temperatures.pop(0)
+        sample = {"timestamp": "00:00:00", "temperature": temperature, "source": self.source_name, "flame_level": self.flame_level}
+        if temperature is None:
+            sample["error"] = "Thermocouple open circuit"
+        return sample
+
+    def set_flame_level(self, level):
+        self.flame_level = int(level)
+        self.flame_changes.append(self.flame_level)
+        return {"flame_level": self.flame_level, "source": self.source_name}
+
+    def health_status(self):
+        return {"flame_level": self.flame_level}
+
+
+def _wire_safety(monkeypatch, sensor, max_temp=0.0, policy="hold", after=5):
+    emitted = _wire(monkeypatch, sensor)
+    monkeypatch.setattr(sockets_module, "max_bean_temp_c", max_temp)
+    monkeypatch.setattr(sockets_module, "sensor_fault_flame_policy", policy)
+    monkeypatch.setattr(sockets_module, "sensor_fault_flame_after", after)
+    monkeypatch.setattr(sockets_module, "over_temperature_active", False)
+    return emitted
+
+
+def test_over_temperature_cuts_flame_once_and_rearms(monkeypatch):
+    sensor = ScriptedSensor([240.0, 251.0, 252.0, 244.0, 251.0])
+    emitted = _wire_safety(monkeypatch, sensor, max_temp=250)
+
+    sockets_module._sensor_tick()  # 240: below the limit
+    assert sensor.flame_changes == []
+
+    sockets_module._sensor_tick()  # 251: cutoff
+    assert sensor.flame_changes == [0]
+    safety = [payload for event, payload in emitted if event == "safety_event"]
+    assert len(safety) == 1
+    assert safety[0]["type"] == "over_temperature"
+    assert safety[0]["previous_flame_level"] == 60
+    assert any(event == "sensor_state" and payload["flame_level"] == 0 for event, payload in emitted)
+
+    sensor.flame_level = 30  # the roaster turns the flame back up
+    sockets_module._sensor_tick()  # 252: still over, no second cutoff until re-armed
+    assert sensor.flame_changes == [0]
+
+    sockets_module._sensor_tick()  # 244: more than 5 °C below the limit -> re-armed
+    sockets_module._sensor_tick()  # 251: cut again
+    assert sensor.flame_changes == [0, 0]
+
+
+def test_over_temperature_disabled_when_limit_is_zero(monkeypatch):
+    sensor = ScriptedSensor([300.0])
+    emitted = _wire_safety(monkeypatch, sensor, max_temp=0)
+    sockets_module._sensor_tick()
+    assert sensor.flame_changes == []
+    assert all(event != "safety_event" for event, _ in emitted)
+
+
+def test_sensor_fault_policy_min_cuts_flame_after_n_faults(monkeypatch):
+    sensor = ScriptedSensor([None, None, None, 180.0])
+    emitted = _wire_safety(monkeypatch, sensor, policy="min", after=3)
+
+    sockets_module._sensor_tick()
+    sockets_module._sensor_tick()
+    assert sensor.flame_changes == []
+
+    sockets_module._sensor_tick()  # third consecutive fault
+    assert sensor.flame_changes == [0]
+    assert [payload["type"] for event, payload in emitted if event == "safety_event"] == ["sensor_fault"]
+
+    sockets_module._sensor_tick()  # recovery does not touch the flame
+    assert sensor.flame_changes == [0]
+
+
+def test_sensor_fault_policy_hold_leaves_flame_alone(monkeypatch):
+    sensor = ScriptedSensor([None] * 6)
+    emitted = _wire_safety(monkeypatch, sensor, policy="hold", after=3)
+    for _ in range(6):
+        sockets_module._sensor_tick()
+    assert sensor.flame_changes == []
+    assert all(event != "safety_event" for event, _ in emitted)

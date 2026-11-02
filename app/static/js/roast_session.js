@@ -36,7 +36,18 @@ const analyticsDevelopmentEl = document.getElementById("analyticsDevelopment");
 const analyticsDevelopmentRatioEl = document.getElementById("analyticsDevelopmentRatio");
 const analyticsPeakTemperatureEl = document.getElementById("analyticsPeakTemperature");
 const analyticsRorEl = document.getElementById("analyticsRor");
+const analyticsAucEl = document.getElementById("analyticsAuc");
 const analyticsCopyEl = document.getElementById("analyticsCopy");
+const assistModeEl = document.getElementById("assistMode");
+const assistTargetEl = document.getElementById("assistTarget");
+const assistDeadbandEl = document.getElementById("assistDeadband");
+const assistStepEl = document.getElementById("assistStep");
+const assistIntervalEl = document.getElementById("assistInterval");
+const assistMinEl = document.getElementById("assistMin");
+const assistMaxEl = document.getElementById("assistMax");
+const assistToggleEl = document.getElementById("assistToggle");
+const assistStatusEl = document.getElementById("assistStatus");
+const assistCopyEl = document.getElementById("assistCopy");
 const phaseSummaryEl = document.getElementById("phaseSummary");
 const phaseProjectionEl = document.getElementById("phaseProjection");
 const lcdTemperatureEl = document.getElementById("lcdTemperature");
@@ -87,6 +98,12 @@ const referenceCuesFired = new Set();
 // Alarms.
 let roastAlarms = loadRoastAlarms();
 const firedAlarmIds = new Set();
+
+// Flame assist.
+let assistSettings = loadAssistSettings();
+let assistEnabled = false;
+let lastAssistAdjustAt = 0;
+let lastManualFlameAt = 0;
 
 function formatNow() {
     return new Date().toLocaleTimeString([], {
@@ -282,6 +299,7 @@ async function loadReferenceRoast(roastId) {
         beanName: roast.bean_name || `Roast #${roast.id}`,
         temperature,
         flame: buildFlameSeries(roast.curve || [], options),
+        rorSeries: buildRorSeries(roast.curve || [], options),
         cues,
         turnX: turningPoint?.x ?? 0,
         phases: buildRoastPhases(roast.curve || [], roast.events || [], options),
@@ -465,6 +483,7 @@ function renderAnalytics() {
         ? `${analytics.peakTemperature.toFixed(1)} °C`
         : "--";
     analyticsRorEl.textContent = formatRate(analytics.currentRor);
+    analyticsAucEl.textContent = formatAuc(analytics.auc);
 
     renderLcds(analytics);
     renderProjection(analytics);
@@ -672,8 +691,111 @@ function applyFlameLevel(level, options = {}) {
         });
     }
 
+    if (options.source !== "assist") {
+        // A hand (or alarm) move pauses the assist for one interval so they never fight.
+        lastManualFlameAt = Date.now();
+    }
     lastLoggedFlameLevel = nextFlameLevel;
 }
+
+// --- Flame assist (RoR step controller) ------------------------------------------
+
+function fillAssistForm() {
+    assistModeEl.value = assistSettings.mode;
+    assistTargetEl.value = assistSettings.targetRor;
+    assistDeadbandEl.value = assistSettings.deadband;
+    assistStepEl.value = assistSettings.stepPercent;
+    assistIntervalEl.value = assistSettings.intervalSeconds;
+    assistMinEl.value = assistSettings.minFlame;
+    assistMaxEl.value = assistSettings.maxFlame;
+}
+
+function readAssistForm() {
+    assistSettings = saveAssistSettings({
+        mode: assistModeEl.value,
+        targetRor: assistTargetEl.value,
+        deadband: assistDeadbandEl.value,
+        stepPercent: assistStepEl.value,
+        intervalSeconds: assistIntervalEl.value,
+        minFlame: assistMinEl.value,
+        maxFlame: assistMaxEl.value,
+    });
+    fillAssistForm();
+}
+
+function setAssistEnabled(enabled, reason) {
+    assistEnabled = Boolean(enabled);
+    assistToggleEl.textContent = assistEnabled ? "Disable assist" : "Enable assist";
+    assistStatusEl.classList.toggle("assist-active", assistEnabled);
+    if (!assistEnabled) {
+        assistStatusEl.textContent = reason ? `Off (${reason})` : "Off";
+        return;
+    }
+    assistStatusEl.textContent = "Armed";
+}
+
+function currentAssistTarget(elapsedMinutes) {
+    if (assistSettings.mode === "reference") {
+        return roastReference ? referenceRorAt(roastReference.rorSeries, elapsedMinutes) : null;
+    }
+    return assistSettings.targetRor;
+}
+
+function runFlameAssist(analytics) {
+    if (!assistEnabled || !roastRecording || roastFinished || !roastStartedAt) {
+        return;
+    }
+    if (sensorFaultActive) {
+        assistStatusEl.textContent = "Paused (sensor fault)";
+        return;
+    }
+    const now = Date.now();
+    const intervalMs = assistSettings.intervalSeconds * 1000;
+    const elapsedMinutes = (now - new Date(roastStartedAt).getTime()) / 60000;
+    const target = currentAssistTarget(elapsedMinutes);
+    const ror = analytics?.currentRor ?? null;
+    if (!Number.isFinite(target)) {
+        assistStatusEl.textContent = assistSettings.mode === "reference"
+            ? "Waiting (no reference RoR at this time)"
+            : "Waiting (no target)";
+        return;
+    }
+    if (!Number.isFinite(ror)) {
+        assistStatusEl.textContent = "Waiting (no RoR yet)";
+        return;
+    }
+    const manualHold = now - lastManualFlameAt < intervalMs;
+    const waiting = now - lastAssistAdjustAt < intervalMs;
+    assistStatusEl.textContent = `Target ${target.toFixed(1)} · RoR ${ror.toFixed(1)}${manualHold ? " · paused after manual move" : ""}`;
+    if (manualHold || waiting) {
+        return;
+    }
+
+    const next = computeAssistAdjustment({ ror, target, currentFlame: currentFlameLevel(), settings: assistSettings });
+    lastAssistAdjustAt = now;
+    if (next === null) {
+        return;
+    }
+    applyFlameLevel(next, { source: "assist" });
+    assistCopyEl.textContent = `Assist moved the flame to ${next}% at ${formatDuration(elapsedMinutes * 60)} (RoR ${ror.toFixed(1)} vs target ${target.toFixed(1)}).`;
+}
+
+[assistModeEl, assistTargetEl, assistDeadbandEl, assistStepEl, assistIntervalEl, assistMinEl, assistMaxEl].forEach((element) => {
+    element.addEventListener("change", readAssistForm);
+});
+
+assistToggleEl.addEventListener("click", () => {
+    readAssistForm();
+    if (!assistEnabled && assistSettings.mode === "reference" && !roastReference) {
+        showToast("Pick a reference roast on the setup page to follow its RoR.", "error");
+        return;
+    }
+    setAssistEnabled(!assistEnabled);
+    if (assistEnabled) {
+        lastAssistAdjustAt = Date.now(); // first adjustment after one full interval
+        showToast("Flame assist enabled. Moving the slider pauses it for one interval.", "info");
+    }
+});
 
 // --- Alarms -----------------------------------------------------------------------
 
@@ -928,6 +1050,23 @@ roastSessionSocket.on("control_response", (data) => {
     sessionMessageEl.textContent = data.message;
 });
 
+// The server cut the flame (over-temperature or sensor-fault policy).
+roastSessionSocket.on("safety_event", (data) => {
+    const message = data?.message || "The server cut the flame for safety.";
+    flameControlEl.value = "0";
+    flameValueEl.textContent = "0%";
+    roastHardwareFlameLevelEl.textContent = "0%";
+    if (roastRecording && !roastFinished) {
+        addEvent("Safety Cutoff", message, { color: "#a53d2d", flameLevel: 0 });
+    }
+    lastLoggedFlameLevel = 0;
+    lastManualFlameAt = Date.now();
+    setAssistEnabled(false, "safety cutoff");
+    playAlarmBeep();
+    notifyRoast("Safety cutoff", message, "error");
+    sessionMessageEl.textContent = message;
+});
+
 flameControlEl.addEventListener("input", () => {
     applyFlameLevel(flameControlEl.value);
 });
@@ -1017,6 +1156,7 @@ finishRoastButtonEl.addEventListener("click", () => {
 
     roastFinished = true;
     roastRecording = false;
+    setAssistEnabled(false, "roast dropped");
     releaseWakeLock();
     roastSessionSocket.emit("control", { command: "stop" });
     addEvent("Drop", `Beans dropped at ${temperatureValueEl.textContent}. Ready for review.`, {
@@ -1034,6 +1174,8 @@ finishRoastButtonEl.addEventListener("click", () => {
 renderEvents();
 renderAnalytics();
 renderAlarmList();
+fillAssistForm();
+setAssistEnabled(false);
 maybeOfferDraftResume();
 if (requestedReferenceId && !roastReference) {
     loadReferenceRoast(requestedReferenceId).catch(() => {
@@ -1074,6 +1216,7 @@ const timerTickId = window.setInterval(() => {
             checkReferenceCues();
         }
         evaluateAlarms(latestAnalytics);
+        runFlameAssist(latestAnalytics);
     }
 }, 1000);
 

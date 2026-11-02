@@ -1,6 +1,6 @@
 // Roaster Server service worker.
 // Bump CACHE_VERSION whenever precached assets change to invalidate old caches.
-const CACHE_VERSION = "roaster-v10";
+const CACHE_VERSION = "roaster-v11";
 const PRECACHE = `${CACHE_VERSION}-precache`;
 const RUNTIME = `${CACHE_VERSION}-runtime`;
 
@@ -13,6 +13,8 @@ const STATIC_ASSETS = [
     "/static/js/dashboard.js",
     "/static/js/roast_session.js",
     "/static/js/roast_alarms.js",
+    "/static/js/roast_assist.js",
+    "/static/js/reports.js",
     "/static/js/roast_review.js",
     "/static/js/roast_setup.js",
     "/static/js/lookup_page.js",

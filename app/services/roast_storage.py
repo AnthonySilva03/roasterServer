@@ -6,7 +6,18 @@ from pathlib import Path
 from flask import current_app
 
 # Bump this when adding new columns or tables.
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
+
+# Post-roast properties added in v3 (Artisan's Roast Properties dialog).
+# column -> SQL definition. Text columns default to '' so rows never carry NULL text.
+ROAST_PROPERTY_COLUMNS = (
+    ("roasted_weight_grams", "REAL"),
+    ("roast_color", "TEXT NOT NULL DEFAULT ''"),
+    ("green_moisture_percent", "REAL"),
+    ("batch_label", "TEXT NOT NULL DEFAULT ''"),
+    ("ambient_temp_c", "REAL"),
+)
+ROAST_PROPERTY_FIELDS = tuple(column for column, _ in ROAST_PROPERTY_COLUMNS)
 
 
 def init_db(app):
@@ -56,6 +67,10 @@ def _apply_migrations(connection, from_version):
     if from_version < 2:
         _migrate_v2(connection)
         _record_version(connection, 2)
+
+    if from_version < 3:
+        _migrate_v3(connection)
+        _record_version(connection, 3)
 
 
 def _migrate_v1(connection):
@@ -107,30 +122,59 @@ def _migrate_v2(connection):
         )
 
 
+def _migrate_v3(connection):
+    """Add post-roast property columns (roasted weight, colour, moisture, batch, ambient)."""
+    existing = {row[1] for row in connection.execute("PRAGMA table_info(roast_sessions)")}
+    for column, definition in ROAST_PROPERTY_COLUMNS:
+        if column not in existing:
+            connection.execute(f"ALTER TABLE roast_sessions ADD COLUMN {column} {definition}")
+
+
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
 
-_INSERT_ROAST_SQL = """
-    INSERT INTO roast_sessions (
-        bean_name,
-        origin,
-        roast_level,
-        weight_grams,
-        flame_level,
-        total_roast_seconds,
-        notes,
-        taste_notes,
-        rating,
-        sample_count,
-        started_at,
-        ended_at,
-        created_at,
-        curve_json,
-        events_json,
-        photo_filename
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-"""
+_BASE_COLUMNS = (
+    "bean_name",
+    "origin",
+    "roast_level",
+    "weight_grams",
+    "flame_level",
+    "total_roast_seconds",
+    "notes",
+    "taste_notes",
+    "rating",
+    "sample_count",
+    "started_at",
+    "ended_at",
+    "created_at",
+    "curve_json",
+    "events_json",
+    "photo_filename",
+)
+_INSERT_COLUMNS = _BASE_COLUMNS + ROAST_PROPERTY_FIELDS
+_INSERT_ROAST_SQL = (
+    f"INSERT INTO roast_sessions ({', '.join(_INSERT_COLUMNS)}) "
+    f"VALUES ({', '.join('?' for _ in _INSERT_COLUMNS)})"
+)
+_LIST_COLUMNS = (
+    "id",
+    "bean_name",
+    "origin",
+    "roast_level",
+    "weight_grams",
+    "flame_level",
+    "total_roast_seconds",
+    "notes",
+    "taste_notes",
+    "rating",
+    "sample_count",
+    "started_at",
+    "ended_at",
+    "created_at",
+    "photo_filename",
+) + ROAST_PROPERTY_FIELDS
+_DETAIL_COLUMNS = _LIST_COLUMNS + ("curve_json", "events_json", "photo_data")
 
 
 def save_roast_session(payload):
@@ -172,29 +216,27 @@ def _roast_row(payload):
         json.dumps(curve),
         json.dumps(events),
         payload.get("photo_filename", "") or "",
+        *_property_values(payload),
     )
+
+
+def _property_values(payload):
+    """Values for ROAST_PROPERTY_FIELDS in order; text fields never None."""
+    values = []
+    for column, definition in ROAST_PROPERTY_COLUMNS:
+        value = payload.get(column)
+        if definition.startswith("TEXT"):
+            values.append("" if value is None else str(value).strip())
+        else:
+            values.append(value)
+    return values
 
 
 def list_roast_sessions(limit=8):
     with sqlite3.connect(_database_path()) as connection:
         connection.row_factory = sqlite3.Row
-        query = """
-            SELECT
-                id,
-                bean_name,
-                origin,
-                roast_level,
-                weight_grams,
-                flame_level,
-                total_roast_seconds,
-                notes,
-                taste_notes,
-                rating,
-                sample_count,
-                started_at,
-                ended_at,
-                created_at,
-                photo_filename
+        query = f"""
+            SELECT {', '.join(_LIST_COLUMNS)}
             FROM roast_sessions
             ORDER BY id DESC
         """
@@ -213,26 +255,8 @@ def get_roast_session(roast_id):
     with sqlite3.connect(_database_path()) as connection:
         connection.row_factory = sqlite3.Row
         row = connection.execute(
-            """
-            SELECT
-                id,
-                bean_name,
-                origin,
-                roast_level,
-                weight_grams,
-                flame_level,
-                total_roast_seconds,
-                notes,
-                taste_notes,
-                rating,
-                sample_count,
-                started_at,
-                ended_at,
-                created_at,
-                curve_json,
-                events_json,
-                photo_data,
-                photo_filename
+            f"""
+            SELECT {', '.join(_DETAIL_COLUMNS)}
             FROM roast_sessions
             WHERE id = ?
             """,
@@ -243,6 +267,7 @@ def get_roast_session(roast_id):
         return None
 
     roast = dict(row)
+    roast["weight_loss_percent"] = _weight_loss_percent(roast.get("weight_grams"), roast.get("roasted_weight_grams"))
     roast["flame_level"] = _normalize_flame_level(roast.get("flame_level"))
     roast["curve"] = json.loads(roast.pop("curve_json") or "[]")
     roast["events"] = json.loads(roast.pop("events_json") or "[]")
@@ -288,31 +313,30 @@ def get_roast_summary():
 
 
 def update_roast_session(roast_id, payload):
-    row = (
-        payload["bean_name"].strip(),
-        payload["origin"].strip(),
-        payload["roast_level"].strip(),
-        payload.get("weight_grams"),
-        payload.get("notes", "").strip(),
-        payload.get("rating"),
-        payload.get("taste_notes", "").strip(),
-        roast_id,
-    )
+    """Update editable metadata. Property fields absent from the payload are left unchanged."""
+    assignments = [
+        ("bean_name", payload["bean_name"].strip()),
+        ("origin", payload["origin"].strip()),
+        ("roast_level", payload["roast_level"].strip()),
+        ("weight_grams", payload.get("weight_grams")),
+        ("notes", payload.get("notes", "").strip()),
+        ("rating", payload.get("rating")),
+        ("taste_notes", payload.get("taste_notes", "").strip()),
+    ]
+    for column, definition in ROAST_PROPERTY_COLUMNS:
+        if column not in payload:
+            continue
+        value = payload.get(column)
+        if definition.startswith("TEXT"):
+            value = "" if value is None else str(value).strip()
+        assignments.append((column, value))
+
+    set_clause = ", ".join(f"{column} = ?" for column, _ in assignments)
+    row = tuple(value for _, value in assignments) + (roast_id,)
 
     with sqlite3.connect(_database_path()) as connection:
         cursor = connection.execute(
-            """
-            UPDATE roast_sessions
-            SET
-                bean_name = ?,
-                origin = ?,
-                roast_level = ?,
-                weight_grams = ?,
-                notes = ?,
-                rating = ?,
-                taste_notes = ?
-            WHERE id = ?
-            """,
+            f"UPDATE roast_sessions SET {set_clause} WHERE id = ?",
             row,
         )
         connection.commit()
@@ -353,7 +377,20 @@ def _format_list_row(row):
     result = dict(row)
     photo_filename = result.get("photo_filename", "") or ""
     result["photo_url"] = f"/uploads/{photo_filename}" if photo_filename else ""
+    result["weight_loss_percent"] = _weight_loss_percent(result.get("weight_grams"), result.get("roasted_weight_grams"))
     return result
+
+
+def _weight_loss_percent(weight_in, weight_out):
+    """(green - roasted) / green as a percentage, or None when either is missing."""
+    try:
+        weight_in = float(weight_in)
+        weight_out = float(weight_out)
+    except (TypeError, ValueError):
+        return None
+    if weight_in <= 0:
+        return None
+    return round((weight_in - weight_out) / weight_in * 100, 2)
 
 
 def _normalize_flame_level(value):

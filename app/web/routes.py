@@ -1,14 +1,18 @@
 import base64
+import csv
+import io
 import math
 import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 from app import sockets as sockets_module
+from app.services import roast_math
 from app.services.roast_storage import (
+    ROAST_PROPERTY_FIELDS,
     delete_roast_session,
     get_roast_session,
     get_roast_summary,
@@ -112,6 +116,15 @@ def settings_page():
         active_page="settings",
         servo_min_pulsewidth=current_app.config["SERVO_MIN_PULSEWIDTH"],
         servo_max_pulsewidth=current_app.config["SERVO_MAX_PULSEWIDTH"],
+    )
+
+
+@main.route("/reports")
+def reports_page():
+    current_app.logger.info("Rendered reports page")
+    return render_template(
+        "reports.html",
+        active_page="reports",
     )
 
 
@@ -308,6 +321,16 @@ def patch_roast(roast_id):
             current_app.logger.warning("Rejected roast feedback update due to rating bounds", extra={"roast_id": roast_id, "rating": normalized_rating})
             return jsonify({"error": "Rating must be between 1 and 5."}), 400
 
+    # Post-roast properties: only the fields present in the request are changed.
+    properties = {field: payload[field] for field in ROAST_PROPERTY_FIELDS if field in payload}
+    property_error = _normalize_roast_properties(properties, only_present=True)
+    if property_error:
+        current_app.logger.warning(
+            "Rejected roast update due to invalid property",
+            extra={"roast_id": roast_id, "error": property_error},
+        )
+        return jsonify({"error": property_error}), 400
+
     roast = update_roast_session(
         roast_id,
         {
@@ -318,6 +341,7 @@ def patch_roast(roast_id):
             "notes": notes,
             "rating": normalized_rating,
             "taste_notes": taste_notes,
+            **properties,
         },
     )
     if roast is None:
@@ -429,11 +453,62 @@ def _normalize_roast_payload(payload):
         if payload["rating"] < 1 or payload["rating"] > 5:
             return "Rating must be between 1 and 5."
 
+    error = _normalize_roast_properties(payload)
+    if error:
+        return error
+
     error = _normalize_curve_points(payload)
     if error:
         return error
 
     return _normalize_event_entries(payload)
+
+
+_PROPERTY_TEXT_MAX = 80
+_NUMERIC_PROPERTIES = (
+    # field, label, minimum, maximum, unit
+    ("roasted_weight_grams", "Roasted weight", 0, 100000, "grams"),
+    ("green_moisture_percent", "Green moisture", 0, 100, "percent"),
+    ("ambient_temp_c", "Ambient temperature", -50, 80, "°C"),
+)
+_TEXT_PROPERTIES = (("roast_color", "Roast color"), ("batch_label", "Batch label"))
+
+
+def _normalize_roast_properties(payload, only_present=False):
+    """Coerce the post-roast property fields in place. Returns an error or None.
+
+    With only_present=True (PATCH) fields missing from the payload are left
+    untouched; otherwise (create/import) they are filled with None / ''.
+    """
+    for field, label, low, high, unit in _NUMERIC_PROPERTIES:
+        if only_present and field not in payload:
+            continue
+        value = payload.get(field)
+        if value in ("", None):
+            payload[field] = None
+            continue
+        number = _finite_number(value)
+        if number is None:
+            return f"{label} must be a number in {unit}."
+        if number < low or number > high:
+            return f"{label} must be between {low} and {high} {unit}."
+        payload[field] = round(number, 2)
+
+    for field, label in _TEXT_PROPERTIES:
+        if only_present and field not in payload:
+            continue
+        value = payload.get(field)
+        if value is None:
+            payload[field] = ""
+            continue
+        if not isinstance(value, str):
+            return f"{label} must be text."
+        text = value.strip()
+        if len(text) > _PROPERTY_TEXT_MAX:
+            return f"{label} must be {_PROPERTY_TEXT_MAX} characters or fewer."
+        payload[field] = text
+
+    return None
 
 
 def _normalize_curve_points(payload):
@@ -559,7 +634,177 @@ _EXPORT_FIELDS = [
     "created_at",
     "curve",
     "events",
+    *ROAST_PROPERTY_FIELDS,
 ]
+
+
+@main.route("/api/roasts/report", methods=["GET"])
+def roast_report():
+    """Per-roast statistics for the ranking report (phases, key temps, loss, AUC)."""
+    auc_base = roast_math._number(request.args.get("auc_base", "150")) if request.args.get("auc_base") else 150.0
+    if auc_base is None:
+        return jsonify({"error": "auc_base must be a number in °C."}), 400
+
+    items = []
+    for row in list_roast_sessions(limit=None):
+        roast = get_roast_session(row["id"])
+        if roast is not None:
+            items.append(roast_math.roast_report_row(roast, auc_base_c=auc_base))
+
+    current_app.logger.info("Built roast report", extra={"count": len(items), "auc_base": auc_base})
+    return jsonify({"items": items, "auc_base_c": auc_base})
+
+
+@main.route("/api/roasts/<int:roast_id>/export.csv", methods=["GET"])
+def export_roast_csv(roast_id):
+    """Curve as CSV: seconds from charge, sample time, bean temp, flame %, event label."""
+    roast = get_roast_session(roast_id)
+    if roast is None:
+        current_app.logger.warning("Requested CSV export for missing roast", extra={"roast_id": roast_id})
+        abort(404)
+
+    times = roast_math.roast_times(roast)
+    points = times["points"]
+    charge = times["charge"] or (points[0][0] if points else None)
+    anchor = roast_math.parse_timestamp(roast.get("started_at"))
+
+    # Attach each event to its nearest sample so the CSV stays one table.
+    labels_by_index = {}
+    for event in roast.get("events") or []:
+        when = roast_math.parse_timestamp(event.get("time"), anchor)
+        if when is None or not points:
+            continue
+        index = min(range(len(points)), key=lambda i: abs((points[i][0] - when).total_seconds()))
+        labels_by_index.setdefault(index, []).append(str(event.get("label", "")))
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["elapsed_seconds", "timestamp", "bean_temp_c", "flame_percent", "event"])
+    raw_curve = roast.get("curve") or []
+    for index, (when, temperature, flame) in enumerate(points):
+        elapsed = round((when - charge).total_seconds(), 3) if charge else ""
+        timestamp = raw_curve[index].get("timestamp", "") if index < len(raw_curve) else ""
+        writer.writerow([
+            elapsed,
+            timestamp,
+            f"{temperature:.2f}",
+            "" if flame is None else flame,
+            "; ".join(labels_by_index.get(index, [])),
+        ])
+
+    response = Response(buffer.getvalue(), mimetype="text/csv")
+    response.headers["Content-Disposition"] = f'attachment; filename="{_export_filename(roast, "csv")}"'
+    current_app.logger.info("Exported roast CSV", extra={"roast_id": roast_id, "rows": len(points)})
+    return response
+
+
+@main.route("/api/roasts/<int:roast_id>/export.alog", methods=["GET"])
+def export_roast_alog(roast_id):
+    """Artisan profile (.alog): a Python dict literal Artisan opens with File > Open."""
+    roast = get_roast_session(roast_id)
+    if roast is None:
+        current_app.logger.warning("Requested Artisan export for missing roast", extra={"roast_id": roast_id})
+        abort(404)
+
+    profile = _artisan_profile(roast)
+    response = Response(repr(profile), mimetype="application/octet-stream")
+    response.headers["Content-Disposition"] = f'attachment; filename="{_export_filename(roast, "alog")}"'
+    current_app.logger.info("Exported roast as Artisan profile", extra={"roast_id": roast_id, "samples": len(profile["timex"])})
+    return response
+
+
+_ARTISAN_BURNER_TYPE = 3  # index into etypes: Air, Drum, Damper, Burner
+
+
+def _artisan_profile(roast):
+    """Build an Artisan profile dict. Bean temp goes to temp2 (BT); there is no
+    environment probe so temp1 (ET) is -1 (Artisan's "no reading")."""
+    times = roast_math.roast_times(roast)
+    points = times["points"]
+    anchor = roast_math.parse_timestamp(roast.get("started_at"))
+    t0 = points[0][0] if points else None
+
+    timex = [round((when - t0).total_seconds(), 3) for when, _, _ in points]
+    temp2 = [round(temperature, 2) for _, temperature, _ in points]
+    temp1 = [-1.0] * len(points)
+
+    def index_at(when):
+        if when is None or not points:
+            return None
+        return min(range(len(points)), key=lambda i: abs((points[i][0] - when).total_seconds()))
+
+    events = roast.get("events") or []
+
+    def role_index(role, fallback=None):
+        event = roast_math.find_event(events, role)
+        when = roast_math.parse_timestamp((event or {}).get("time"), anchor) if event else fallback
+        return index_at(when)
+
+    charge_index = role_index("charge", times["charge"])
+    drop_index = role_index("drop", times["drop"])
+    timeindex = [
+        charge_index if charge_index is not None else -1,
+        role_index("dryEnd") or 0,
+        role_index("firstCrack") or 0,
+        role_index("firstCrackEnd") or 0,
+        role_index("secondCrack") or 0,
+        0,  # second crack end is not tracked
+        drop_index or 0,
+        0,  # cool end is not tracked
+    ]
+
+    # Flame moves become Burner slider events. Artisan stores slider values
+    # as value/10 + 1 and shows them back as (value-1)*10.
+    special = []
+    initial_flame = points[charge_index][2] if charge_index is not None and points[charge_index][2] is not None else None
+    if initial_flame is not None:
+        special.append((charge_index, initial_flame))
+    for event in events:
+        if event.get("label") != "Flame Change":
+            continue
+        flame = event.get("flame_level")
+        index = index_at(roast_math.parse_timestamp(event.get("time"), anchor))
+        if index is not None and isinstance(flame, (int, float)) and not isinstance(flame, bool):
+            special.append((index, int(flame)))
+    special.sort()
+
+    started = anchor or t0 or datetime.utcnow()
+    return {
+        "version": "roaster-server",
+        "revision": 1,
+        "artisan_os": "raspberry-pi",
+        "mode": "C",
+        "title": roast.get("bean_name") or f"Roast #{roast.get('id')}",
+        "beans": " / ".join(part for part in (roast.get("bean_name"), roast.get("origin")) if part),
+        "roastertype": "Raspberry Pi roaster",
+        "roastdate": started.strftime("%Y-%m-%d"),
+        "roastisodate": started.strftime("%Y-%m-%d"),
+        "roasttime": started.strftime("%H:%M:%S"),
+        "roastepoch": int(started.replace(tzinfo=timezone.utc).timestamp()),
+        "roastbatchnr": 0,
+        "roastbatchprefix": roast.get("batch_label") or "",
+        "weight": [float(roast.get("weight_grams") or 0), float(roast.get("roasted_weight_grams") or 0), "g"],
+        "moisture_greens": float(roast.get("green_moisture_percent") or 0),
+        "ambientTemp": float(roast.get("ambient_temp_c") or 0),
+        "roastingnotes": roast.get("notes") or "",
+        "cuppingnotes": roast.get("taste_notes") or "",
+        "samplinginterval": float(current_app.config.get("SENSOR_INTERVAL_SECONDS", 2.0)),
+        "timex": timex,
+        "temp1": temp1,
+        "temp2": temp2,
+        "timeindex": timeindex,
+        "etypes": ["Air", "Drum", "Damper", "Burner"],
+        "specialevents": [index for index, _ in special],
+        "specialeventstype": [_ARTISAN_BURNER_TYPE for _ in special],
+        "specialeventsvalue": [round(flame / 10 + 1, 2) for _, flame in special],
+        "specialeventsStrings": [f"{flame}%" for _, flame in special],
+        "extradevices": [],
+        "extratimex": [],
+        "extratemp1": [],
+        "extratemp2": [],
+        "extraname1": [],
+        "extraname2": [],
+    }
 
 
 @main.route("/api/roasts/<int:roast_id>/export", methods=["GET"])
@@ -676,9 +921,9 @@ def _photo_as_data_url(roast):
     return f"data:image/{mime};base64,{base64.b64encode(raw).decode()}"
 
 
-def _export_filename(roast):
+def _export_filename(roast, extension="json"):
     slug = re.sub(r'[^\w\-]+', '-', (roast.get("bean_name") or "roast")).strip("-").lower() or "roast"
-    return f"roast-{roast['id']}-{slug}.json"
+    return f"roast-{roast['id']}-{slug}.{extension}"
 
 
 def _require_wifi_setup_mode():
@@ -739,6 +984,7 @@ def get_sensor_health():
         ), 503
 
     health = sockets_module.sensor_service.health_status()
+    health["safety"] = sockets_module.safety_settings()
     status_code = 200 if health["connected"] and health["temperature_ok"] and health["servo_ok"] else 503
     if status_code == 200:
         current_app.logger.info(

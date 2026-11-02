@@ -7,6 +7,7 @@ const path = require("node:path");
 
 const charts = require(path.join(__dirname, "..", "..", "app", "static", "js", "live_charts.js"));
 const alarms = require(path.join(__dirname, "..", "..", "app", "static", "js", "roast_alarms.js"));
+const assist = require(path.join(__dirname, "..", "..", "app", "static", "js", "roast_assist.js"));
 
 const START = "2026-04-15T12:00:00.000Z";
 
@@ -125,6 +126,52 @@ test("buildRoastAnalytics uses the smoothed RoR and reports phases", () => {
     assert.ok(Math.abs(analytics.currentRor - 9) < 0.05);
     assert.equal(analytics.totalDurationSeconds, 300);
     assert.equal(analytics.phases.phases.length, 1);
+});
+
+test("buildAuc integrates the curve above the base from Dry End (or charge)", () => {
+    // 100 -> 200 °C over 10 min. Above 150 °C from charge: triangle 5:00-10:00 = 125.
+    const curve = ramp(600, 10);
+    const fromCharge = charts.buildAuc(curve, [], { startedAt: at(0), endedAt: at(600), baseTemp: 150 });
+    assert.ok(Math.abs(fromCharge - 125) < 1, `auc ${fromCharge}`);
+    // From Dry End at 8:00 above 180 °C: 8:00-10:00 triangle = 20.
+    const fromDryEnd = charts.buildAuc(curve, [{ label: "Dry End", time: at(480) }], { startedAt: at(0), endedAt: at(600), baseTemp: 180 });
+    assert.ok(Math.abs(fromDryEnd - 20) < 1, `auc ${fromDryEnd}`);
+    assert.equal(charts.buildAuc([], [], {}), null);
+    assert.equal(charts.buildRoastAnalytics(curve, [], { startedAt: at(0), endedAt: at(600) }).auc, fromCharge);
+});
+
+test("buildKeyTemperatures prefers recorded event temperatures and finds the turning point", () => {
+    const curve = [];
+    for (let s = 0; s <= 300; s += 2) {
+        curve.push({ timestamp: at(s), temperature: s < 50 ? 180 - s : 130 + (s - 50), flame_level: 50 });
+    }
+    const events = [
+        { label: "Charge", time: at(0), temperature: 181.5 },
+        { label: "First Crack", time: at(200) },
+    ];
+    const temps = charts.buildKeyTemperatures(curve, events, { startedAt: at(0), endedAt: at(300) });
+    assert.equal(temps.charge, 181.5);
+    assert.equal(temps.turningPoint, 130);
+    assert.equal(Math.round(temps.turningPointSeconds), 50);
+    assert.equal(temps.firstCrack, 280);
+    assert.equal(temps.drop, 380);
+    assert.equal(temps.dryEnd, null);
+});
+
+test("flame assist: settings are clamped and adjustments step within bounds", () => {
+    const settings = assist.normalizeAssistSettings({ targetRor: 8, deadband: 1, stepPercent: 5, intervalSeconds: 1, minFlame: 20, maxFlame: 10 });
+    assert.equal(settings.intervalSeconds, 5, "interval floor");
+    assert.equal(settings.maxFlame, 20, "max never below min");
+    assert.equal(settings.mode, "fixed");
+
+    const s = assist.normalizeAssistSettings({ ...assist.ASSIST_DEFAULTS, minFlame: 10, maxFlame: 90 });
+    assert.equal(assist.computeAssistAdjustment({ ror: 5, target: 8, currentFlame: 50, settings: s }), 55, "below target: raise");
+    assert.equal(assist.computeAssistAdjustment({ ror: 12, target: 8, currentFlame: 50, settings: s }), 45, "above target: lower");
+    assert.equal(assist.computeAssistAdjustment({ ror: 8.5, target: 8, currentFlame: 50, settings: s }), null, "inside dead band");
+    assert.equal(assist.computeAssistAdjustment({ ror: 20, target: 8, currentFlame: 12, settings: s }), 10, "clamped to min");
+    assert.equal(assist.computeAssistAdjustment({ ror: 20, target: 8, currentFlame: 10, settings: s }), null, "already at min");
+    assert.equal(assist.computeAssistAdjustment({ ror: null, target: 8, currentFlame: 50, settings: s }), null, "no RoR");
+    assert.equal(assist.computeAssistAdjustment({ ror: 2, target: null, currentFlame: 50, settings: s }), null, "no target");
 });
 
 test("alarms: normalize, describe and evaluate with event gating", () => {

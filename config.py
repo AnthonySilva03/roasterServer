@@ -25,6 +25,13 @@ class Config:
     SERVO_MIN_PULSEWIDTH = int(os.environ.get("SERVO_MIN_PULSEWIDTH", "1000"))
     SERVO_MAX_PULSEWIDTH = int(os.environ.get("SERVO_MAX_PULSEWIDTH", "2000"))
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+    # Safety: cut the flame to 0% once the bean probe reads this hot (0 disables).
+    MAX_BEAN_TEMP_C = float(os.environ.get("MAX_BEAN_TEMP_C", "250"))
+    # What to do with the flame while the thermocouple is faulting:
+    # "hold" keeps the current setting, "min" drops it to 0% after
+    # SENSOR_FAULT_FLAME_AFTER consecutive faulty reads.
+    SENSOR_FAULT_FLAME_POLICY = os.environ.get("SENSOR_FAULT_FLAME_POLICY", "hold").lower()
+    SENSOR_FAULT_FLAME_AFTER = int(os.environ.get("SENSOR_FAULT_FLAME_AFTER", "5"))
     SENSOR_LOG_EVERY_N = int(os.environ.get("SENSOR_LOG_EVERY_N", "10"))
     WIFI_SETUP_MODE = os.environ.get("WIFI_SETUP_MODE", "false").lower() == "true"
     WIFI_INTERFACE = os.environ.get("WIFI_INTERFACE", "wlan0")
