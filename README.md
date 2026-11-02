@@ -190,7 +190,6 @@ These environment variables are supported:
 - `SECRET_KEY`
 - `DATABASE_URL`
 - `SENSOR_INTERVAL_SECONDS`
-- `MAX_CHART_POINTS`
 - `SOCKET_CORS_ALLOWED_ORIGINS`
 - `SENSOR_MODE`
 - `LOG_LEVEL`

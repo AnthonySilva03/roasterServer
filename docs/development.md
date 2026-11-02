@@ -72,7 +72,6 @@ Or with the helper script:
 ## Useful Environment Variables
 
 - `SENSOR_INTERVAL_SECONDS`: how often the server emits sensor updates.
-- `MAX_CHART_POINTS`: how many recent points the frontend keeps per chart.
 - `DATABASE_URL`: overrides the SQLite database location.
 - `SOCKET_CORS_ALLOWED_ORIGINS`: adjusts allowed Socket.IO origins.
 - `SENSOR_MODE`: set to `pigpio` on Raspberry Pi hardware, otherwise leave as simulated.

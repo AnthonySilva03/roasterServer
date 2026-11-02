@@ -1,5 +1,4 @@
 const roastSessionSocket = io();
-const roastSessionMaxPoints = Number(document.body.dataset.maxPoints || 30);
 const beanName = document.body.dataset.beanName || "Unnamed Roast";
 const origin = document.body.dataset.origin || "Unknown origin";
 const roastLevel = document.body.dataset.roastLevel || "Medium";
@@ -352,10 +351,6 @@ function captureTemperature(data) {
         temperature: Number(data.temperature),
         flame_level: currentFlameLevel(),
     });
-
-    if (roastCurve.length > roastSessionMaxPoints) {
-        roastCurve.shift();
-    }
 
     setChartSeries(
         roastChart,

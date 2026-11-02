@@ -8,7 +8,6 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SENSOR_INTERVAL_SECONDS = float(os.environ.get("SENSOR_INTERVAL_SECONDS", "2.0"))
-    MAX_CHART_POINTS = int(os.environ.get("MAX_CHART_POINTS", "30"))
     SOCKET_CORS_ALLOWED_ORIGINS = os.environ.get(
         "SOCKET_CORS_ALLOWED_ORIGINS", "*"
     )

@@ -38,7 +38,6 @@ def dashboard():
     current_app.logger.info("Rendered dashboard page")
     return render_template(
         "dashboard.html",
-        max_chart_points=current_app.config["MAX_CHART_POINTS"],
         active_page="dashboard",
     )
 
@@ -71,7 +70,6 @@ def roast_session_page():
 
     return render_template(
         "roast_session.html",
-        max_chart_points=current_app.config["MAX_CHART_POINTS"],
         active_page="roast",
         bean_name=bean_name,
         origin=origin,

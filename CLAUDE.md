@@ -74,9 +74,8 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 |---|---|---|
 | `SECRET_KEY` | `devkey` | Must be overridden in production |
 | `SENSOR_MODE` | `simulated` | Set to `pigpio` on Pi hardware |
-| `DATABASE_URL` | `sqlite:///instance/roasts.db` | SQLite path |
+| `DATABASE_URL` | `sqlite:///roasts.db` | SQLite path, resolved relative to `instance/` |
 | `SENSOR_INTERVAL_SECONDS` | `2` | Sensor broadcast rate |
-| `MAX_CHART_POINTS` | `300` | Frontend chart buffer |
 | `MAX6675_CS_PIN` | `8` | GPIO chip-select for thermocouple |
 | `MAX6675_CLK_PIN` | `11` | GPIO clock |
 | `MAX6675_DO_PIN` | `9` | GPIO data-out |
