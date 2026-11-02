@@ -4,7 +4,7 @@
 
 1. Create a virtual environment.
 2. Install dependencies with `pip install -r requirements.txt`.
-3. Run the app with `python run.py`.
+3. Run the app with `make run` (or `./scripts/dev.sh run`). Both generate a throwaway `SECRET_KEY` and, on macOS, set `EVENTLET_HUB=selects`; `python run.py` directly needs `SECRET_KEY` exported.
 
 ## Workflow Visual
 
@@ -54,7 +54,11 @@ Or with the helper script:
 
 ## Development Notes
 
-- If `pigpio` is unavailable, the app automatically uses simulated data.
+- If `pigpio` is unavailable (not installed or the daemon is down), the app runs on simulated data and labels the source `simulated`. A faulting thermocouple in `pigpio` mode is different: the sample carries `temperature: null` plus an `error`, the UI shows `-- °C`, and nothing simulated is ever substituted.
+- The roast session keeps the whole curve (no point cap) and persists an in-progress draft plus the pending review payload to `localStorage`, so a closed tab can resume.
+- The settings page (`/settings`) shows live hardware health and a servo calibration slider; `POST /api/sensor/calibration` persists the pulse-width range to `instance/calibration.json`, which overrides the env defaults on the next start.
+- Roast payloads are validated strictly (`_normalize_roast_payload` in `routes.py`); import writes all photos then inserts all rows in one transaction, so a bad or failing entry imports nothing.
+- Every innerHTML template escapes data through `escapeHtml()` from `live_charts.js`.
 - The dashboard includes a hardware health panel backed by `GET /api/sensor/health`.
 - Both the dashboard and lookup page use Leaflet-based interactive origin maps via `origin_map.js`. Both pages must load `leaflet.js` before `origin_map.js` in their scripts block.
 - Adding new coffee-growing regions requires extending `coffeeOriginCatalog` in `app/static/js/origin_map.js`.
@@ -71,6 +75,8 @@ Or with the helper script:
 
 ## Useful Environment Variables
 
+- `SECRET_KEY`: required outside tests; the app refuses `devkey`, `change-me`, or an empty value.
+- `LOG_LEVEL` / `SENSOR_LOG_EVERY_N`: console log level and how often a sensor sample is logged.
 - `SENSOR_INTERVAL_SECONDS`: how often the server emits sensor updates.
 - `DATABASE_URL`: overrides the SQLite database location.
 - `SOCKET_CORS_ALLOWED_ORIGINS`: adjusts allowed Socket.IO origins.
@@ -80,7 +86,8 @@ Or with the helper script:
 - `MAX6675_DO_PIN`: data-out GPIO for the MAX6675 reader.
 - `SERVO_CONTROL_PIN`: GPIO pin used for the roast flame servo.
 - `SERVO_MIN_PULSEWIDTH`: minimum pulse width for the servo controller.
-- `SERVO_MAX_PULSEWIDTH`: maximum pulse width for the servo controller.
+- `SERVO_MAX_PULSEWIDTH`: maximum pulse width for the servo controller (both pulse widths are overridden by a saved calibration).
+- `CAPTIVE_PORTAL_ENABLED`: redirect captive-portal probe URLs to the dashboard in direct-AP mode.
 
 ## Raspberry Pi Notes
 
@@ -88,7 +95,7 @@ Or with the helper script:
 - Set `SENSOR_MODE=pigpio` before starting the Flask app.
 - The current hardware reader expects a MAX6675 thermocouple breakout.
 - The roast flame slider can drive a servo through `SERVO_CONTROL_PIN` when hardware mode is enabled.
-- If the Pi reader is unavailable, the app falls back to simulated data so the UI still works.
+- If the pigpio daemon is unavailable, the app falls back to simulated data so the UI still works; a wiring fault with the daemon up is reported as a fault instead.
 - For Wi-Fi onboarding, use `./scripts/wifi_provisioning_bootstrap.sh` instead of `python run.py` so the Pi can fall back to a temporary setup hotspot when it is not already on a saved network.
 
 ### Pi Setup Visual
@@ -151,9 +158,9 @@ Then allow passwordless `nmcli` for the service user in `sudoers`. The setup rou
 
 ### Start On Boot With systemd
 
-The repo includes a ready-to-edit unit file at [deploy/roaster-server.service](/home/ub20/Documents/python/flaskTesting/roasterServer/deploy/roaster-server.service) and an env template at [deploy/roaster-server.env.example](/home/ub20/Documents/python/flaskTesting/roasterServer/deploy/roaster-server.env.example).
+The repo includes a ready-to-edit unit file at [deploy/roaster-server.service](../deploy/roaster-server.service) and an env template at [deploy/roaster-server.env.example](../deploy/roaster-server.env.example).
 
-The full Raspberry Pi deployment guide now lives in [docs/pi-setup.md](/home/ub20/Documents/python/flaskTesting/roasterServer/docs/pi-setup.md).
+The full Raspberry Pi deployment guide now lives in [docs/pi-setup.md](pi-setup.md).
 
 Quick install on a Pi:
 
@@ -172,10 +179,7 @@ sudo systemctl start roaster-server.service
 
 `install_pi_service.sh` also installs `deploy/sudoers-roaster-server` to `/etc/sudoers.d/roaster-server` after a `visudo -cf` check. It grants the `pi` user passwordless `nmcli`, so the setup page can save Wi-Fi credentials, and passwordless `systemctl restart roaster-server.service`, so deploys can restart the app without a terminal.
 
-The service launches `scripts/wifi_provisioning_bootstrap.sh`, so startup behavior is:
-
-- If a saved Wi-Fi connection comes up, the app starts in normal mode.
-- If no saved Wi-Fi connects, the script enables the setup hotspot and starts Flask in setup mode.
+The unit runs `venv/bin/python run.py` directly. In the recommended direct-AP deployment the Pi's own Wi-Fi comes from `hostapd` + `dnsmasq` (installed by `scripts/install_pi_ap.sh`), not from the app. `scripts/wifi_provisioning_bootstrap.sh` is the NetworkManager-based alternative for joining a home network; point the unit's `ExecStart=` at it to use the `provision`/`client` modes. See `docs/pi-setup.md`.
 
 For troubleshooting:
 
@@ -187,6 +191,7 @@ sudo journalctl -u roaster-server.service -f
 ## Hardware Health Check
 
 - The backend exposes `GET /api/sensor/health`.
+- In `pigpio` mode the endpoint reports the sensor loop's most recent read rather than reading the chip itself, so polling it never contends with the loop on the MAX6675 bus. It only reads directly when the loop is paused or has not sampled recently. Every bit-banged read holds a lock.
 - The dashboard polls that endpoint and shows temperature sensor status, servo status, current flame level, mode, and the last reported error.
 - A `200` response means the configured mode passed the health check.
 - A `503` response means the Pi hardware path is unavailable or failing.
@@ -214,9 +219,8 @@ Unhealthy examples:
 Useful checks:
 
 ```bash
-python -m compileall app run.py config.py
-python run.py
-PYTHONPATH=. pytest
+make check                     # compileall + pytest
+make run                       # dev SECRET_KEY generated; EVENTLET_HUB=selects on macOS
 curl http://127.0.0.1:5000/api/sensor/health
 ```
 
@@ -232,25 +236,36 @@ That file tracks the current product state, important decisions, key files, know
 
 ## Test Layout
 
-- `tests/test_sensor_service.py` verifies simulated and `pigpio` sensor behavior.
-- `tests/test_app.py` verifies page rendering, roast API flows, and the sensor health endpoint.
-- The test app disables the background sensor task so tests stay deterministic.
+- `tests/test_sensor_service.py` verifies simulated and `pigpio` sensor behavior, fault samples, cached health, and the bus lock.
+- `tests/test_app.py` verifies page rendering, roast API validation and flows, photos, export/import atomicity, PWA assets, and the `SECRET_KEY` guard.
+- `tests/test_sockets.py` verifies the sensor loop tick survives read errors and broadcasts fault samples.
+- Each test gets a fresh temporary instance folder and SQLite file, and the background sensor task is disabled, so tests stay deterministic.
+- Frontend logic has no committed test harness. Changes are checked with `node --check`; during development, stubbed-DOM harnesses run in plain Node (load `live_charts.js` then the page script in a `vm` context with `document`, `io`, `Chart`, and `localStorage` stubs).
 
 ### Test Map
 
 ```text
 tests/test_sensor_service.py
   -> simulated sample shape
-  -> MAX6675 reads
+  -> MAX6675 reads, open-circuit fault samples
   -> servo pulse mapping
-  -> hardware health
+  -> hardware health: cached loop read, stale fallback, direct-read failure
+  -> bus lock held during reads
+
+tests/test_sockets.py
+  -> tick survives read exceptions and recovers
+  -> fault samples broadcast and counted
+  -> paused loop skips reads
 
 tests/test_app.py
-  -> page renders
-  -> roast create/detail
-  -> roast summary
-  -> lookup edit page
-  -> roast property patch
-  -> roast delete flow
+  -> page renders (incl. /settings)
+  -> roast create/detail/summary, payload validation + coercion
+  -> ?limit validation
+  -> lookup edit page, roast property patch, delete (+ photo file)
+  -> photo type/size validation
+  -> export/import round trip, atomic import (validation, photo failure, DB failure)
+  -> Wi-Fi setup routes, captive-portal probes
+  -> PWA manifest + service worker
+  -> SECRET_KEY guard
   -> sensor health endpoint
 ```

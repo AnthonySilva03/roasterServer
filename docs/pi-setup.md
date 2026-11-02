@@ -4,7 +4,7 @@ This guide covers installing Roaster Server on a Raspberry Pi, enabling automati
 
 ## Network Modes
 
-The startup script supports three modes via the `ROASTER_NET_MODE` env var:
+There are three network modes. `direct-ap` is the installed default and runs on `hostapd` (`scripts/install_pi_ap.sh`); `provision` and `client` come from `scripts/wifi_provisioning_bootstrap.sh` and are selected with the `ROASTER_NET_MODE` env var:
 
 | Mode | Behavior | Phone connects to |
 |---|---|---|
@@ -20,10 +20,12 @@ The startup script supports three modes via the `ROASTER_NET_MODE` env var:
 
 ## Files Used
 
-- [deploy/roaster-server.service](/home/ub20/Documents/python/flaskTesting/roasterServer/deploy/roaster-server.service)
-- [deploy/roaster-server.env.example](/home/ub20/Documents/python/flaskTesting/roasterServer/deploy/roaster-server.env.example)
-- [scripts/install_pi_service.sh](/home/ub20/Documents/python/flaskTesting/roasterServer/scripts/install_pi_service.sh)
-- [scripts/wifi_provisioning_bootstrap.sh](/home/ub20/Documents/python/flaskTesting/roasterServer/scripts/wifi_provisioning_bootstrap.sh)
+- [deploy/roaster-server.service](../deploy/roaster-server.service)
+- [deploy/roaster-server.env.example](../deploy/roaster-server.env.example)
+- [scripts/install_pi_service.sh](../scripts/install_pi_service.sh)
+- [scripts/wifi_provisioning_bootstrap.sh](../scripts/wifi_provisioning_bootstrap.sh)
+- [scripts/install_pi_ap.sh](../scripts/install_pi_ap.sh) and [deploy/ap/](../deploy/ap/) (hostapd + dnsmasq configs)
+- [deploy/sudoers-roaster-server](../deploy/sudoers-roaster-server)
 
 ## Fresh Pi Install
 
@@ -94,12 +96,18 @@ sudo systemctl is-enabled roaster-server.service
 ## Automatic Startup Behavior
 
 Once `roaster-server.service` is enabled, `systemd` starts it on every boot. The
-service runs `scripts/wifi_provisioning_bootstrap.sh`, which branches on
-`ROASTER_NET_MODE`:
+unit runs `venv/bin/python run.py` directly (see `deploy/roaster-server.service`);
+it does not run the Wi-Fi bootstrap script. In the recommended `direct-ap` setup
+the network comes from the separate `hostapd` and `dnsmasq` services installed by
+`scripts/install_pi_ap.sh`; the unit is ordered after them.
 
-- `direct-ap` — brings up the Pi's own access point and launches the full app
+`scripts/wifi_provisioning_bootstrap.sh` is the NetworkManager-based alternative
+for joining a home network. To use it, point the unit's `ExecStart=` at that
+script instead of `run.py`; it then branches on `ROASTER_NET_MODE`:
+
 - `provision` — waits briefly for saved Wi-Fi; starts the setup hotspot only if none connects
 - `client` — starts the app against saved Wi-Fi, no hotspot
+- `direct-ap` — deprecated on Pi hardware (see below); use the hostapd stack
 
 ## Direct Access-Point Mode (recommended)
 
@@ -155,12 +163,16 @@ app on the roaster network (which has no internet):
 
 ### Switching modes / recovery
 
-To leave direct-ap mode (e.g. to put the Pi back on home Wi-Fi), edit
-`deploy/roaster-server.env`, set `ROASTER_NET_MODE=provision` (or `client`), then:
+To leave direct-ap mode (e.g. to put the Pi back on home Wi-Fi) undo the
+hostapd stack by hand; there is no uninstall script. Do it over Ethernet:
 
-```bash
-sudo systemctl restart roaster-server.service
-```
+1. `sudo systemctl disable --now hostapd dnsmasq`
+2. Remove `/etc/NetworkManager/conf.d/99-roaster-unmanaged.conf` and restart
+   NetworkManager so it manages `wlan0` again
+3. Point `ExecStart=` in `deploy/roaster-server.service` at
+   `scripts/wifi_provisioning_bootstrap.sh`, set `ROASTER_NET_MODE=provision`
+   (or `client`) in `deploy/roaster-server.env`, then
+   `sudo ./scripts/install_pi_service.sh && sudo systemctl restart roaster-server.service`
 
 In `provision` mode, onboard home Wi-Fi from the phone:
 
@@ -214,11 +226,21 @@ MAX6675_CS_PIN=8
 MAX6675_CLK_PIN=11
 MAX6675_DO_PIN=9
 SERVO_CONTROL_PIN=18
+SERVO_MIN_PULSEWIDTH=1000
+SERVO_MAX_PULSEWIDTH=2000
 ```
+
+The reference roaster wires the servo to GPIO 17 and uses a 500–2500 µs range.
+The settings page (`/settings`) can adjust the range live; saving there writes
+`instance/calibration.json`, which overrides the env values on the next start.
+
+A thermocouple fault (open circuit, loose wire) is reported as a fault: the
+session page shows `-- °C`, logs a Hardware Issue event, and leaves a gap in the
+curve. Only a missing pigpio daemon makes the app fall back to simulated data.
 
 ## Troubleshooting
 
-- If the setup page cannot save Wi-Fi, check the `sudoers` rule for `/usr/bin/nmcli`
+- If the setup page cannot save Wi-Fi, or a remote `sudo -n systemctl restart roaster-server.service` asks for a password, the sudoers rules are not installed: run `sudo -n -l` to check, then step 4 above
 - If the service fails on boot, run `sudo journalctl -u roaster-server.service -b`
-- If your Pi username or install path is different, update `User=`, `Group=`, `WorkingDirectory=`, `EnvironmentFile=`, and `ExecStart=` in [deploy/roaster-server.service](/home/ub20/Documents/python/flaskTesting/roasterServer/deploy/roaster-server.service)
+- If your Pi username or install path is different, update `User=`, `Group=`, `WorkingDirectory=`, `EnvironmentFile=`, and `ExecStart=` in [deploy/roaster-server.service](../deploy/roaster-server.service)
 - If the Pi never enters hotspot mode, verify `NetworkManager` is enabled and that `wlan0` is the correct interface

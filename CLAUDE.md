@@ -22,20 +22,26 @@ PYTHONPATH=. pytest # if pytest cannot find app
 app/__init__.py              Flask factory, config load, DB init, schema migration
 app/web/routes.py            All HTTP routes and JSON API endpoints
 app/sockets.py               Socket.IO events, sensor broadcast loop, flame control
-app/services/sensor_service.py   SensorService: pigpio or simulated, servo, health
+app/services/sensor_service.py   SensorService: pigpio or simulated, servo, health, bus lock
 app/services/roast_storage.py    SQLite persistence, schema versioning, photo file storage
+app/services/calibration.py      Servo pulse-width calibration persisted to instance/calibration.json
+app/services/wifi_service.py     nmcli wrapper for the /setup/wifi provisioning page
 
 app/templates/dashboard.html     Monthly calendar + Leaflet origin map + hardware health
 app/templates/roast_session.html Active roast, live graph, stage buttons, flame slider
 app/templates/roast_review.html  Save/cancel step with graph preview + photo upload
 app/templates/lookup.html        Saved roast browser with Leaflet origin filter map
 app/templates/lookup_edit.html   Post-roast metadata editor
+app/templates/settings.html      Hardware check + flame (servo) calibration slider
 
 app/static/js/origin_map.js  Shared Leaflet map + coffee-region alias matching
 app/static/js/dashboard.js   Dashboard calendar, origin map markers, health panel
 app/static/js/roast_session.js  Active roast logic, stage events, hardware polling
 app/static/js/lookup_page.js    Saved roast detail, origin filter, chart, photo
 app/static/js/roast_review.js   Pending roast review and save/cancel logic
+app/static/js/settings.js       Settings page: health panel, calibration POST
+app/static/js/live_charts.js    Shared: Chart.js setup, RoR/turn point, analytics, escapeHtml, hasSensorTemperature
+app/static/sw.js                Service worker (precache + runtime caching); bump CACHE_VERSION on asset changes
 
 config.py                    All env-var defaults
 tests/test_app.py            Integration tests: routes, roast API, photo handling
@@ -45,7 +51,7 @@ tests/test_sockets.py        Unit tests: sensor loop tick resilience
 
 ## Architecture in One Paragraph
 
-HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets.py) runs a background loop (`_sensor_loop` → `_sensor_tick` per iteration) that emits `sensor_data` events to connected browsers; a failing hardware read is logged and skipped so the loop never dies. `SensorService` is the single hardware abstraction — it either reads a MAX6675 via pigpio or generates a simulated roast curve. `roast_storage.py` owns all SQLite work without an ORM. The frontend captures sensor events in `sessionStorage` during an active roast, then posts them to `POST /api/roasts` on the review page.
+HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets.py) runs a background loop (`_sensor_loop` → `_sensor_tick` per iteration) that emits `sensor_data` events to connected browsers; a failing hardware read is logged and skipped so the loop never dies. `SensorService` is the single hardware abstraction — it either reads a MAX6675 via pigpio or generates a simulated roast curve. `roast_storage.py` owns all SQLite work without an ORM. The frontend keeps the full roast curve in memory during an active roast, mirrors it to `localStorage` as a resumable draft, hands the finished roast to the review page through `localStorage`, and the review page POSTs it to `/api/roasts`.
 
 ## Critical Patterns
 
@@ -55,7 +61,7 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Origin maps** — Both the dashboard and lookup page use Leaflet (`origin_map.js`). `renderOriginMarkers(containerEl, origins, selectedKey, onSelect)` mounts a Leaflet map into `containerEl` on first call (module-level singleton per page load). Marker clicks fire `onSelect(key)`. Adding new coffee regions means extending `coffeeOriginCatalog` in `origin_map.js`.
 
-**Roast save flow** — Active session page stores a pending roast object in `sessionStorage`. Review page reads it, shows a preview chart, and POSTs to `/api/roasts` on confirm. If the tab is closed before saving, the pending roast is lost (known limitation).
+**Roast save flow** — The active session keeps the whole curve in memory (no point cap) and writes an in-progress draft to `localStorage` (`roastDraft`) on every sample; reopening `/roast/session` offers to resume it. `Finish` writes the payload to `localStorage` (`pendingRoastReview`) and opens the review page, which shows a preview chart and POSTs to `/api/roasts` on confirm, then clears the key. Both survive a tab close or crash.
 
 **Simulated badge** — The server sets `simulated: bool` on `sensor_state` Socket.IO events. The dashboard and roast session pages show a gold `#simulatedBadge` pill when `state.simulated` is true.
 
@@ -87,6 +93,8 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 | `MAX6675_CLK_PIN` | `11` | GPIO clock |
 | `MAX6675_DO_PIN` | `9` | GPIO data-out |
 | `SERVO_CONTROL_PIN` | `18` | GPIO for flame servo |
+| `SERVO_MIN_PULSEWIDTH` / `SERVO_MAX_PULSEWIDTH` | `1000` / `2000` | µs range for 0–100 % flame; overridden by saved calibration |
+| `CAPTIVE_PORTAL_ENABLED` | `false` | Redirect captive-portal probe URLs to the dashboard (direct-AP mode) |
 | `WIFI_SETUP_MODE` | `false` | Enables `/setup/wifi` provisioning page |
 
 ## API Surface
@@ -110,7 +118,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 72 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+Each test gets a fresh temporary instance folder and SQLite file (`tests/conftest.py`), with the background sensor task disabled. 72 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
 
 ## Common Gotchas
 
@@ -118,3 +126,7 @@ All tests use an in-memory SQLite DB and disable the background sensor task. 72 
 - The `_originMap` singleton in `origin_map.js` is per-page-load. Calling `renderOriginMarkers` with a different container on the same page will silently reuse the first container.
 - `wifi_service` only exposes the provisioning routes while `WIFI_SETUP_MODE=true`. The dashboard redirects to `/setup/wifi` when that flag is set.
 - `make check` runs `python -m compileall` first — catch syntax errors before pytest.
+- Static files (JS, CSS, `sw.js`) are served from disk, so a deploy that only touches them needs no service restart but does need a `CACHE_VERSION` bump. Python changes need `systemctl restart roaster-server.service`.
+- The Pi cannot reach GitHub. Deploy by pushing from a workstation to a temp ref and fast-forwarding on the Pi (`docs/pi-setup.md` → Deploying Updates).
+- On macOS with the Python 3.9 venv, eventlet's kqueue hub crashes on the first accepted request. `make run` / `dev.sh run` set `EVENTLET_HUB=selects` on Darwin; set it yourself if you run `run.py` directly.
+- In `pigpio` mode a failed thermocouple read is a fault sample (`temperature: null`), never a simulated value. Only a missing pigpio daemon switches the whole source to `simulated`.

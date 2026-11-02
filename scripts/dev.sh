@@ -33,6 +33,8 @@ case "$1" in
         "$PIP" install -r requirements-dev.txt
         ;;
     run)
+        # macOS: eventlet's kqueue hub crashes under Python 3.9; use the select hub.
+        if [[ "$(uname -s)" == "Darwin" ]]; then export EVENTLET_HUB="${EVENTLET_HUB:-selects}"; fi
         # Throwaway SECRET_KEY when none is set; the app refuses placeholder keys.
         SECRET_KEY="${SECRET_KEY:-$("$PYTHON" -c 'import secrets; print(secrets.token_hex(32))')}" "$PYTHON" run.py
         ;;
