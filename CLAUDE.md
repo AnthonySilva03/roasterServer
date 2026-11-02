@@ -61,6 +61,8 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Security** — The app raises `RuntimeError` at startup if `SECRET_KEY` is unset or one of the placeholders in `config.INSECURE_SECRET_KEYS` (`devkey`, `change-me`) outside test mode; `make run` / `dev.sh run` generate a throwaway key when none is exported. Photo uploads are validated for MIME type (jpeg/png/gif/webp) and raw size (≤ 5 MB / 7 MB base64) in routes.py.
 
+**Hardware health** — In pigpio mode `SensorService.health_status()` reports the sensor loop's most recent MAX6675 read (fresh within `_FRESH_READ_INTERVALS` × `interval_seconds`) instead of reading the chip itself; it only reads directly when the loop is paused, not yet started, or failing. Every bit-banged read holds `_bus_lock`, so a direct read can never interleave its clock pulses with the loop's under eventlet. Health is polled every 10 s by the roast session, the dashboard, and the settings page.
+
 **Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before saving any (no partial imports), drops incoming `id`s, and assigns fresh ones. `create_roast` and `import_roasts` share `_normalize_roast_payload` for field coercion/validation.
 
 **Rate-of-rise & turn point** — Client-side only, in `live_charts.js`. `buildRorSeries(curve, {windowSeconds})` returns smoothed RoR points; `enableRorOverlay(chart)` adds a second dataset on the right-hand `y1` axis (temperature stays dataset 0 so `stageMarkerPlugin` is unaffected). `detectTurningPoint(curve, {startedAt, riseThreshold})` returns the confirmed post-charge minimum, drawn as a stage marker by `rebuildStageMarkers` in `roast_session.js`. No server storage — these are derived from the saved curve.
@@ -104,7 +106,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 57 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+All tests use an in-memory SQLite DB and disable the background sensor task. 62 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
 
 ## Common Gotchas
 

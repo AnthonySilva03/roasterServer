@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import threading
 import time
 
 try:
@@ -15,6 +16,11 @@ DEFAULT_DO_PIN = 9
 DEFAULT_SERVO_PIN = 18
 DEFAULT_SERVO_MIN_PULSEWIDTH = 1000
 DEFAULT_SERVO_MAX_PULSEWIDTH = 2000
+
+# A MAX6675 read is considered fresh for this many sensor intervals. While the
+# sensor loop is sampling, health_status() reports that read instead of
+# touching the bus again.
+_FRESH_READ_INTERVALS = 2.0
 
 
 class SensorService:
@@ -39,6 +45,11 @@ class SensorService:
         self.servo_min_pulsewidth = servo_min_pulsewidth
         self.servo_max_pulsewidth = servo_max_pulsewidth
         self._current_flame_level = 50
+        # Serializes bit-banged MAX6675 reads. Under eventlet, time.sleep()
+        # yields, so without this a health-check read could interleave its
+        # clock pulses with the sensor loop's and corrupt both results.
+        self._bus_lock = threading.Lock()
+        self._last_read_monotonic = None
         self._pi = self._connect_pigpio()
         self._last_temperature_error = None
         self._sim_temperature = 202.0
@@ -129,11 +140,25 @@ class SensorService:
             )
             return status
 
-        temperature = self._read_temperature()
-        status["temperature_ok"] = temperature is not None
+        # The sensor loop already reads the chip every interval; report that
+        # result rather than contending for the bus. Only read directly when
+        # no recent sample exists (loop paused, not yet started, or failing).
+        if not self._has_fresh_read():
+            try:
+                self._read_temperature()
+            except Exception as error:  # pigpio daemon/socket errors
+                self._last_temperature_error = f"Temperature read failed: {error}"
+
+        status["temperature_ok"] = self._last_temperature_error is None
         status["servo_ok"] = True
         status["last_temperature_error"] = self._last_temperature_error
         return status
+
+    def _has_fresh_read(self) -> bool:
+        if self._last_read_monotonic is None:
+            return False
+        max_age = max(float(self.interval_seconds), 0.1) * _FRESH_READ_INTERVALS
+        return (time.monotonic() - self._last_read_monotonic) <= max_age
 
     def _connect_pigpio(self):
         if self.sensor_mode != "pigpio":
@@ -159,17 +184,20 @@ class SensorService:
         if not self._pi:
             return None
 
-        self._pi.write(self.cs_pin, 0)
-        time.sleep(0.002)
+        with self._bus_lock:
+            self._pi.write(self.cs_pin, 0)
+            time.sleep(0.002)
 
-        data = 0
-        for _ in range(16):
-            self._pi.write(self.clk_pin, 1)
-            time.sleep(0.001)
-            self._pi.write(self.clk_pin, 0)
-            data = (data << 1) | self._pi.read(self.do_pin)
+            data = 0
+            for _ in range(16):
+                self._pi.write(self.clk_pin, 1)
+                time.sleep(0.001)
+                self._pi.write(self.clk_pin, 0)
+                data = (data << 1) | self._pi.read(self.do_pin)
 
-        self._pi.write(self.cs_pin, 1)
+            self._pi.write(self.cs_pin, 1)
+
+        self._last_read_monotonic = time.monotonic()
 
         if data & 0x4:
             self._last_temperature_error = "Thermocouple open circuit"
