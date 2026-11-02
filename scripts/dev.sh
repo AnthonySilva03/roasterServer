@@ -33,7 +33,8 @@ case "$1" in
         "$PIP" install -r requirements-dev.txt
         ;;
     run)
-        "$PYTHON" run.py
+        # Throwaway SECRET_KEY when none is set; the app refuses placeholder keys.
+        SECRET_KEY="${SECRET_KEY:-$("$PYTHON" -c 'import secrets; print(secrets.token_hex(32))')}" "$PYTHON" run.py
         ;;
     seed-roasts)
         PYTHONPATH=. "$PYTHON" scripts/seed_test_roasts.py

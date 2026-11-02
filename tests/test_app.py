@@ -734,3 +734,45 @@ def test_sensor_calibration_rejects_bad_range(client):
     # non-numeric
     r3 = client.post("/api/sensor/calibration", json={"servo_min_pulsewidth": "x", "servo_max_pulsewidth": 2000})
     assert r3.status_code == 400
+
+
+def _non_test_app_config(tmp_path, secret_key):
+    return {
+        "TESTING": False,
+        "SECRET_KEY": secret_key,
+        "START_SENSOR_BACKGROUND_TASK": False,
+        "SENSOR_MODE": "simulated",
+        "SQLALCHEMY_DATABASE_URI": "sqlite:///guard_test.db",
+        "INSTANCE_PATH": str(tmp_path),
+    }
+
+
+def test_create_app_rejects_default_secret_key(tmp_path):
+    import pytest
+    from app import create_app
+
+    with pytest.raises(RuntimeError, match="SECRET_KEY"):
+        create_app(_non_test_app_config(tmp_path, "devkey"))
+
+
+def test_create_app_rejects_example_env_secret_key(tmp_path):
+    import pytest
+    from app import create_app
+
+    with pytest.raises(RuntimeError, match="SECRET_KEY"):
+        create_app(_non_test_app_config(tmp_path, "change-me"))
+
+
+def test_create_app_rejects_empty_secret_key(tmp_path):
+    import pytest
+    from app import create_app
+
+    with pytest.raises(RuntimeError, match="SECRET_KEY"):
+        create_app(_non_test_app_config(tmp_path, ""))
+
+
+def test_create_app_accepts_real_secret_key(tmp_path):
+    from app import create_app
+
+    app = create_app(_non_test_app_config(tmp_path, "f" * 64))
+    assert app.config["SECRET_KEY"] == "f" * 64

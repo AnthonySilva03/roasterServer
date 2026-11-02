@@ -40,11 +40,12 @@ app/static/js/roast_review.js   Pending roast review and save/cancel logic
 config.py                    All env-var defaults
 tests/test_app.py            Integration tests: routes, roast API, photo handling
 tests/test_sensor_service.py Unit tests: sensor modes, servo, health
+tests/test_sockets.py        Unit tests: sensor loop tick resilience
 ```
 
 ## Architecture in One Paragraph
 
-HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets.py) runs a background loop that emits `sensor_data` events to connected browsers. `SensorService` is the single hardware abstraction — it either reads a MAX6675 via pigpio or generates a simulated roast curve. `roast_storage.py` owns all SQLite work without an ORM. The frontend captures sensor events in `sessionStorage` during an active roast, then posts them to `POST /api/roasts` on the review page.
+HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets.py) runs a background loop (`_sensor_loop` → `_sensor_tick` per iteration) that emits `sensor_data` events to connected browsers; a failing hardware read is logged and skipped so the loop never dies. `SensorService` is the single hardware abstraction — it either reads a MAX6675 via pigpio or generates a simulated roast curve. `roast_storage.py` owns all SQLite work without an ORM. The frontend captures sensor events in `sessionStorage` during an active roast, then posts them to `POST /api/roasts` on the review page.
 
 ## Critical Patterns
 
@@ -58,7 +59,7 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Simulated badge** — The server sets `simulated: bool` on `sensor_state` Socket.IO events. The dashboard and roast session pages show a gold `#simulatedBadge` pill when `state.simulated` is true.
 
-**Security** — The app raises `RuntimeError` at startup if `SECRET_KEY == "devkey"` outside test mode. Photo uploads are validated for MIME type (jpeg/png/gif/webp) and raw size (≤ 5 MB / 7 MB base64) in routes.py.
+**Security** — The app raises `RuntimeError` at startup if `SECRET_KEY` is unset or one of the placeholders in `config.INSECURE_SECRET_KEYS` (`devkey`, `change-me`) outside test mode; `make run` / `dev.sh run` generate a throwaway key when none is exported. Photo uploads are validated for MIME type (jpeg/png/gif/webp) and raw size (≤ 5 MB / 7 MB base64) in routes.py.
 
 **Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before saving any (no partial imports), drops incoming `id`s, and assigns fresh ones. `create_roast` and `import_roasts` share `_normalize_roast_payload` for field coercion/validation.
 
@@ -103,7 +104,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 48 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+All tests use an in-memory SQLite DB and disable the background sensor task. 57 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
 
 ## Common Gotchas
 

@@ -14,6 +14,7 @@ background_started = False
 sensor_interval_seconds = 2
 sensor_log_every_n = 10
 sample_counter = 0
+consecutive_read_failures = 0
 
 
 def register_socket_handlers(app):
@@ -56,23 +57,53 @@ def _ensure_background_task():
 
 
 def _sensor_loop():
-    global latest_sample, sample_counter
-
     while True:
-        if sensor_service and sensor_service.active:
-            latest_sample = sensor_service.read_sample()
-            sample_counter += 1
-            if sample_counter == 1 or sample_counter % sensor_log_every_n == 0:
-                logger.info(
-                    "Sensor sample #%s temperature=%s source=%s flame_level=%s",
-                    sample_counter,
-                    latest_sample["temperature"],
-                    latest_sample["source"],
-                    latest_sample["flame_level"],
-                )
-            socketio.emit("sensor_data", latest_sample)
-
+        _sensor_tick()
         socketio.sleep(sensor_interval_seconds)
+
+
+def _sensor_tick():
+    """Run one iteration of the sensor loop.
+
+    Never raises: a failing hardware read (pigpio daemon gone, wiring fault,
+    etc.) is logged and skipped so the background task keeps running and
+    resumes broadcasting as soon as reads succeed again.
+    """
+    global latest_sample, sample_counter, consecutive_read_failures
+
+    if not (sensor_service and sensor_service.active):
+        return
+
+    try:
+        sample = sensor_service.read_sample()
+    except Exception:
+        consecutive_read_failures += 1
+        if consecutive_read_failures == 1 or consecutive_read_failures % sensor_log_every_n == 0:
+            logger.exception(
+                "Sensor read failed (%s consecutive); sensor loop continuing",
+                consecutive_read_failures,
+            )
+        return
+
+    if consecutive_read_failures:
+        logger.info("Sensor read recovered after %s failed attempt(s)", consecutive_read_failures)
+        consecutive_read_failures = 0
+
+    latest_sample = sample
+    sample_counter += 1
+    if sample_counter == 1 or sample_counter % sensor_log_every_n == 0:
+        logger.info(
+            "Sensor sample #%s temperature=%s source=%s flame_level=%s",
+            sample_counter,
+            latest_sample["temperature"],
+            latest_sample["source"],
+            latest_sample["flame_level"],
+        )
+
+    try:
+        socketio.emit("sensor_data", latest_sample)
+    except Exception:
+        logger.exception("Failed to broadcast sensor sample; sensor loop continuing")
 
 
 @socketio.on("connect")

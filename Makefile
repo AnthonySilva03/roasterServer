@@ -20,8 +20,9 @@ install:
 install-dev:
 	$(PIP) install -r requirements-dev.txt
 
+# A throwaway SECRET_KEY is generated when none is set; the app refuses placeholder keys.
 run:
-	$(PYTHON) run.py
+	SECRET_KEY="$${SECRET_KEY:-$$($(PYTHON) -c 'import secrets; print(secrets.token_hex(32))')}" $(PYTHON) run.py
 
 test:
 	$(PYTHON) -m pytest

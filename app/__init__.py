@@ -5,6 +5,8 @@ from pathlib import Path
 from flask import Flask
 from flask_socketio import SocketIO
 
+from config import INSECURE_SECRET_KEYS
+
 # Ensure the PWA manifest is served with the correct content type.
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
@@ -59,10 +61,12 @@ def create_app(test_config=None):
     from .sockets import register_socket_handlers
     register_socket_handlers(app)
 
-    if not app.testing and app.config.get("SECRET_KEY") == "devkey":
+    secret_key = app.config.get("SECRET_KEY")
+    if not app.testing and (not secret_key or secret_key in INSECURE_SECRET_KEYS):
         raise RuntimeError(
-            "SECRET_KEY is set to the insecure default 'devkey'. "
-            "Set the SECRET_KEY environment variable to a strong random value."
+            "SECRET_KEY is unset or a known placeholder. Set the SECRET_KEY "
+            "environment variable to a strong random value, e.g. "
+            "python -c 'import secrets; print(secrets.token_hex(32))'."
         )
 
     from .services.roast_storage import init_db
