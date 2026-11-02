@@ -4,3 +4,4 @@ venv/
 instance/
 .DS_Store
 .claude/
+backups/

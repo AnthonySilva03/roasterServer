@@ -17,7 +17,7 @@ backlog.
   deploy by pushing from a workstation (`docs/pi-setup.md` → Deploying Updates).
   Python changes need a service restart; static-file changes need a
   `CACHE_VERSION` bump in `sw.js` instead.
-- **Tests.** 75 pass via `make check`. There is no committed JS test harness;
+- **Tests.** 80 pass via `make check`. There is no committed JS test harness;
   frontend changes are checked with `node --check` plus ad-hoc stubbed-DOM
   harnesses (plain Node `vm`, no dependencies) during development.
 - **Sudo on the Pi.** `deploy/sudoers-roaster-server` grants `pi` passwordless
@@ -49,6 +49,8 @@ backlog.
    `scripts/install_pi_service.sh`; docs gained a Deploying Updates section.
 9. Docs refreshed; `make run` sets `EVENTLET_HUB=selects` on macOS.
 10. `MAX_CONTENT_LENGTH` (32 MB default) with a JSON 413 handler.
+11. Full backup: `GET /api/roasts/export` (all roasts, oldest first, `?photos=0`)
+    and `scripts/backup_roasts.sh <base-url>` saving to git-ignored `backups/`.
 
 ## Current Priorities
 
@@ -60,7 +62,8 @@ backlog.
    (`live_charts.js`); the review and lookup charts could reuse them.
    Comparative batch overlays remain open.
 3. **Persistence / UI gaps.** Import is endpoint-only (no UI on the lookup
-   page); batch export of all roasts; richer tasting history.
+   page); richer tasting history. Full backup exists:
+   `GET /api/roasts/export` + `scripts/backup_roasts.sh`.
 4. **Hardware polish.** Clearer diagnostics on the settings page, multi-sensor
    support. Servo calibration itself is done.
 5. **Dev ergonomics.** The Artisan branch (PR #1, `worktree-artisan-features`)
@@ -257,7 +260,7 @@ Then verify:
   servo mapping, health (cached, stale fallback, direct-read failure), bus lock.
 - Sensor loop tick: exception survival, fault broadcast, recovery, paused.
 
-`PYTHONPATH=. pytest -q` — 75 passed on 2026-11-02.
+`PYTHONPATH=. pytest -q` — 80 passed on 2026-11-02.
 
 ## Latest Commits
 

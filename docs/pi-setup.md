@@ -195,6 +195,21 @@ ssh pi@<pi-address> sudo -n systemctl restart roaster-server.service   # passwor
 Static files (JS, CSS, the service worker) are served from disk, so a change
 that touches only those needs no restart. Python changes do.
 
+## Backing Up Roasts
+
+The Pi's SD card is the only copy of your roast history. Pull a full backup to
+another machine whenever you like:
+
+```bash
+./scripts/backup_roasts.sh http://<pi-address>            # photos embedded
+./scripts/backup_roasts.sh http://<pi-address> --no-photos
+```
+
+It saves `backups/roaster-backup-<timestamp>.json` (the folder is
+git-ignored). Restore with `POST /api/roasts/import`, which accepts that file
+as-is; the single-request cap is `MAX_CONTENT_LENGTH` (32 MB), so use
+`--no-photos` or split the file if a photo-heavy library exceeds it.
+
 ## Useful Service Commands
 
 ```bash

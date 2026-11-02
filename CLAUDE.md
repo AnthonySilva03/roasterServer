@@ -48,6 +48,7 @@ tests/test_app.py            Integration tests: routes, roast API, photo handlin
 tests/test_sensor_service.py Unit tests: sensor modes, servo, health
 tests/test_sockets.py        Unit tests: sensor loop tick resilience
 tests/test_request_limits.py Request body cap (MAX_CONTENT_LENGTH) returns JSON 413
+tests/test_bulk_export.py    GET /api/roasts/export backup document + import round trip
 ```
 
 ## Architecture in One Paragraph
@@ -74,7 +75,7 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **HTML escaping** — Any data rendered through an innerHTML template literal (bean name, origin, roast level, notes, event label/detail, counts, and date formatters that echo unparseable input) goes through `escapeHtml()` from `live_charts.js`, including attribute values. Single values use `textContent`. Never interpolate raw data into innerHTML; imported JSON is untrusted.
 
-**Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before touching disk or DB, then writes all photos and inserts all rows in one transaction (`save_roast_sessions`); any failure removes the written photos and imports nothing. Incoming `id`s are dropped and fresh ones assigned. `create_roast` and `import_roasts` share `_normalize_roast_payload`, which also type-checks `curve` (list of `{timestamp: str, temperature: finite number}`), `events` (list of objects with a non-empty `label`), `notes`/`taste_notes` (text or null), and `rating` (1–5 or null), coercing numeric strings in place so a bad record is a 400, never a 500.
+**Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL; `GET /api/roasts/export` returns every roast, oldest first, as `{format: "roaster-server-roasts", version, exported_at, count, roasts}` (`?photos=0` omits photos so a big library re-imports under `MAX_CONTENT_LENGTH`). `scripts/backup_roasts.sh <base-url>` saves that document to `backups/`. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before touching disk or DB, then writes all photos and inserts all rows in one transaction (`save_roast_sessions`); any failure removes the written photos and imports nothing. Incoming `id`s are dropped and fresh ones assigned. `create_roast` and `import_roasts` share `_normalize_roast_payload`, which also type-checks `curve` (list of `{timestamp: str, temperature: finite number}`), `events` (list of objects with a non-empty `label`), `notes`/`taste_notes` (text or null), and `rating` (1–5 or null), coercing numeric strings in place so a bad record is a 400, never a 500.
 
 **Rate-of-rise & turn point** — Client-side only, in `live_charts.js`. `buildRorSeries(curve, {windowSeconds})` returns smoothed RoR points; `enableRorOverlay(chart)` adds a second dataset on the right-hand `y1` axis (temperature stays dataset 0 so `stageMarkerPlugin` is unaffected). `detectTurningPoint(curve, {startedAt, riseThreshold})` returns the confirmed post-charge minimum, drawn as a stage marker by `rebuildStageMarkers` in `roast_session.js`. No server storage — these are derived from the saved curve.
 
@@ -108,6 +109,7 @@ GET  /api/roasts/<id>           roast detail with curve + events
 PATCH /api/roasts/<id>          update metadata, notes, rating, tasting notes
 DELETE /api/roasts/<id>         remove roast + photo file
 GET  /api/roasts/<id>/export    download a single roast as portable JSON
+GET  /api/roasts/export         download every roast as one backup document (?photos=0 to omit photos)
 POST /api/roasts/import         restore one or many roasts from exported JSON
 GET  /api/sensor/health         hardware health check (incl. servo pulse-width range)
 POST /api/sensor/calibration    set + persist servo min/max pulse width (flame endpoints)
@@ -120,7 +122,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-Each test gets a fresh temporary instance folder and SQLite file (`tests/conftest.py`), with the background sensor task disabled. 75 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+Each test gets a fresh temporary instance folder and SQLite file (`tests/conftest.py`), with the background sensor task disabled. 80 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
 
 ## Common Gotchas
 

@@ -366,6 +366,7 @@ Expected shape:
 - `PATCH /api/roasts/<id>` updates editable saved-roast properties after roasting.
 - `DELETE /api/roasts/<id>` removes a saved roast and its photo file.
 - `GET /api/roasts/<id>/export` downloads a portable JSON document with the photo embedded.
+- `GET /api/roasts/export` downloads every roast as one backup document (`?photos=0` to leave photos out); `scripts/backup_roasts.sh <base-url>` saves it to `backups/`.
 - `POST /api/roasts/import` restores one or many exported roasts, all-or-nothing.
 - `GET /api/sensor/health` returns temperature and servo hardware health.
 - `POST /api/sensor/calibration` sets and persists the servo pulse-width range.
