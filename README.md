@@ -213,6 +213,7 @@ PYTHONPATH=. pytest
 These environment variables are supported:
 
 - `SECRET_KEY` (required outside tests; `devkey` and `change-me` are rejected)
+- `MAX_CONTENT_LENGTH` (bytes; default 32 MB; larger request bodies get a JSON 413)
 - `DATABASE_URL`
 - `SENSOR_INTERVAL_SECONDS`
 - `SOCKET_CORS_ALLOWED_ORIGINS`

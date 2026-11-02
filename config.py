@@ -6,6 +6,9 @@ INSECURE_SECRET_KEYS = frozenset({"devkey", "change-me"})
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "devkey")
+    # Largest request body the app will read (bytes). A roast with a 5 MB photo
+    # is ~7 MB base64; this leaves room for a multi-roast import on a Pi.
+    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", str(32 * 1024 * 1024)))
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", "sqlite:///roasts.db"
     )

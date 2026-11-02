@@ -76,6 +76,7 @@ Or with the helper script:
 ## Useful Environment Variables
 
 - `SECRET_KEY`: required outside tests; the app refuses `devkey`, `change-me`, or an empty value.
+- `MAX_CONTENT_LENGTH`: largest request body in bytes (default 32 MB); bigger bodies get a JSON 413 instead of being read into memory.
 - `LOG_LEVEL` / `SENSOR_LOG_EVERY_N`: console log level and how often a sensor sample is logged.
 - `SENSOR_INTERVAL_SECONDS`: how often the server emits sensor updates.
 - `DATABASE_URL`: overrides the SQLite database location.

@@ -47,6 +47,7 @@ config.py                    All env-var defaults
 tests/test_app.py            Integration tests: routes, roast API, photo handling
 tests/test_sensor_service.py Unit tests: sensor modes, servo, health
 tests/test_sockets.py        Unit tests: sensor loop tick resilience
+tests/test_request_limits.py Request body cap (MAX_CONTENT_LENGTH) returns JSON 413
 ```
 
 ## Architecture in One Paragraph
@@ -86,6 +87,7 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 | Variable | Default | Notes |
 |---|---|---|
 | `SECRET_KEY` | `devkey` | Must be overridden in production |
+| `MAX_CONTENT_LENGTH` | `33554432` (32 MB) | Largest request body; larger gets a JSON 413 |
 | `SENSOR_MODE` | `simulated` | Set to `pigpio` on Pi hardware |
 | `DATABASE_URL` | `sqlite:///roasts.db` | SQLite path, resolved relative to `instance/` |
 | `SENSOR_INTERVAL_SECONDS` | `2` | Sensor broadcast rate |
@@ -118,7 +120,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-Each test gets a fresh temporary instance folder and SQLite file (`tests/conftest.py`), with the background sensor task disabled. 72 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+Each test gets a fresh temporary instance folder and SQLite file (`tests/conftest.py`), with the background sensor task disabled. 75 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
 
 ## Common Gotchas
 
