@@ -1,4 +1,5 @@
 import base64
+import math
 import re
 import uuid
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from app.services.roast_storage import (
     get_roast_summary,
     list_roast_sessions,
     save_roast_session,
+    save_roast_sessions,
     update_roast_session,
 )
 from app.services import wifi_service
@@ -228,7 +230,15 @@ def wifi_setup_connect():
 @main.route("/api/roasts", methods=["GET"])
 def get_roasts():
     limit_arg = request.args.get("limit", default="8")
-    limit = None if limit_arg == "all" else int(limit_arg)
+    if limit_arg == "all":
+        limit = None
+    else:
+        try:
+            limit = int(limit_arg)
+        except ValueError:
+            limit = 0
+        if limit < 1:
+            return jsonify({"error": "limit must be a positive whole number or 'all'."}), 400
     current_app.logger.info("Listed roasts", extra={"limit": limit_arg})
     return jsonify({"items": list_roast_sessions(limit=limit)})
 
@@ -334,17 +344,7 @@ def delete_roast(roast_id):
 
     delete_roast_session(roast_id)
 
-    photo_filename = roast.get("photo_filename", "")
-    if photo_filename:
-        upload_folder = current_app.config.get("UPLOAD_FOLDER", "")
-        if upload_folder:
-            try:
-                Path(upload_folder, photo_filename).unlink(missing_ok=True)
-            except OSError:
-                current_app.logger.warning(
-                    "Failed to delete photo file",
-                    extra={"photo_filename": photo_filename, "roast_id": roast_id},
-                )
+    _delete_photo_files([roast.get("photo_filename", "")])
 
     current_app.logger.info("Deleted roast session", extra={"roast_id": roast_id})
     return jsonify({"deleted": True, "roast_id": roast_id})
@@ -359,11 +359,27 @@ def _normalize_roast_payload(payload):
         "started_at",
         "ended_at",
     ]
-    missing = [
-        field for field in required_fields if not str(payload.get(field, "")).strip()
-    ]
+    missing = []
+    for field in required_fields:
+        value = payload.get(field)
+        text = "" if value is None else str(value).strip()
+        if not text:
+            missing.append(field)
+        payload[field] = text
     if missing:
         return f"Missing fields: {', '.join(missing)}"
+
+    created_at = payload.get("created_at")
+    payload["created_at"] = "" if created_at is None else str(created_at).strip()
+
+    for field, label in (("notes", "Notes"), ("taste_notes", "Tasting notes")):
+        value = payload.get(field)
+        if value is None:
+            payload[field] = ""
+        elif isinstance(value, str):
+            payload[field] = value.strip()
+        else:
+            return f"{label} must be text."
 
     weight_grams = payload.get("weight_grams")
     if weight_grams in ("", None):
@@ -395,7 +411,92 @@ def _normalize_roast_payload(payload):
         if payload["flame_level"] < 0 or payload["flame_level"] > 100:
             return "Flame level must be between 0 and 100."
 
+    rating = payload.get("rating")
+    if rating in ("", None):
+        payload["rating"] = None
+    else:
+        try:
+            payload["rating"] = int(rating)
+        except (TypeError, ValueError):
+            return "Rating must be a whole number from 1 to 5."
+
+        if payload["rating"] < 1 or payload["rating"] > 5:
+            return "Rating must be between 1 and 5."
+
+    error = _normalize_curve_points(payload)
+    if error:
+        return error
+
+    return _normalize_event_entries(payload)
+
+
+def _normalize_curve_points(payload):
+    """Require curve to be a list of {timestamp: str, temperature: finite number}."""
+    curve = payload.get("curve")
+    if curve is None:
+        curve = []
+    if not isinstance(curve, list):
+        return "Curve must be a list of temperature points."
+
+    normalized = []
+    for index, point in enumerate(curve, start=1):
+        if not isinstance(point, dict):
+            return f"Curve point {index} must be an object."
+        temperature = _finite_number(point.get("temperature"))
+        if temperature is None:
+            return f"Curve point {index} has an invalid temperature."
+        timestamp = point.get("timestamp")
+        if not isinstance(timestamp, str) or not timestamp.strip():
+            return f"Curve point {index} is missing a timestamp."
+        normalized_point = dict(point)
+        normalized_point["temperature"] = temperature
+        normalized_point["timestamp"] = timestamp.strip()
+        normalized.append(normalized_point)
+
+    payload["curve"] = normalized
     return None
+
+
+def _normalize_event_entries(payload):
+    """Require events to be a list of objects with a non-empty text label."""
+    events = payload.get("events")
+    if events is None:
+        events = []
+    if not isinstance(events, list):
+        return "Events must be a list."
+
+    normalized = []
+    for index, event in enumerate(events, start=1):
+        if not isinstance(event, dict):
+            return f"Event {index} must be an object."
+        label = event.get("label")
+        if not isinstance(label, str) or not label.strip():
+            return f"Event {index} is missing a label."
+        detail = event.get("detail")
+        if detail is not None and not isinstance(detail, str):
+            return f"Event {index} detail must be text."
+        normalized_event = dict(event)
+        normalized_event["label"] = label.strip()
+        normalized_event["detail"] = "" if detail is None else detail
+        normalized.append(normalized_event)
+
+    payload["events"] = normalized
+    return None
+
+
+def _finite_number(value):
+    """Return value as a finite float, or None when it is not a usable number."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _utc_now_iso():
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
 
 
 @main.route("/api/roasts", methods=["POST"])
@@ -418,7 +519,7 @@ def create_roast():
     except PhotoSaveError:
         return jsonify({"error": "Could not save the uploaded photo. Please try again."}), 500
 
-    payload["created_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
+    payload["created_at"] = _utc_now_iso()
     roast = save_roast_session(payload)
     current_app.logger.info(
         "Created roast session",
@@ -505,19 +606,26 @@ def import_roasts():
 
         normalized.append((roast_payload, photo_data))
 
-    imported = []
-    for roast_payload, photo_data in normalized:
-        try:
-            roast_payload["photo_filename"] = _save_photo_to_disk(photo_data)
-        except PhotoSaveError:
-            return jsonify({"error": "Could not save an imported photo. Please try again."}), 500
+    # All-or-nothing: write every photo first, then insert every row in one
+    # transaction. Any failure removes the photos already written.
+    photo_filenames = []
+    try:
+        for roast_payload, photo_data in normalized:
+            photo_filename = _save_photo_to_disk(photo_data)
+            roast_payload["photo_filename"] = photo_filename
+            if photo_filename:
+                photo_filenames.append(photo_filename)
+            if not roast_payload.get("created_at"):
+                roast_payload["created_at"] = _utc_now_iso()
 
-        if not str(roast_payload.get("created_at", "")).strip():
-            roast_payload["created_at"] = (
-                datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds") + "Z"
-            )
-
-        imported.append(save_roast_session(roast_payload))
+        imported = save_roast_sessions([roast_payload for roast_payload, _ in normalized])
+    except PhotoSaveError:
+        _delete_photo_files(photo_filenames)
+        return jsonify({"error": "Could not save an imported photo. Nothing was imported."}), 500
+    except Exception:
+        current_app.logger.exception("Import failed while saving roasts")
+        _delete_photo_files(photo_filenames)
+        return jsonify({"error": "Could not save the imported roasts. Nothing was imported."}), 500
 
     current_app.logger.info("Imported roast sessions", extra={"count": len(imported)})
     return jsonify({"imported": len(imported), "items": imported}), 201
@@ -570,6 +678,19 @@ def _export_filename(roast):
 def _require_wifi_setup_mode():
     if not wifi_service.is_setup_mode_enabled(current_app):
         abort(404)
+
+
+def _delete_photo_files(filenames):
+    upload_folder = current_app.config.get("UPLOAD_FOLDER", "")
+    if not upload_folder:
+        return
+    for filename in filenames:
+        if not filename:
+            continue
+        try:
+            Path(upload_folder, filename).unlink(missing_ok=True)
+        except OSError:
+            current_app.logger.warning("Failed to delete photo file", extra={"photo_filename": filename})
 
 
 def _save_photo_to_disk(photo_data):

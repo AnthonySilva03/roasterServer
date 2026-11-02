@@ -547,7 +547,7 @@ def test_update_roast_feedback_rejects_invalid_rating(client):
     assert "Rating must be between 1 and 5." == response.get_json()["error"]
 
 
-def _create_sample_roast(client, **overrides):
+def _sample_roast_payload(**overrides):
     payload = {
         "bean_name": "Export Roast",
         "origin": "Ethiopia",
@@ -570,7 +570,11 @@ def _create_sample_roast(client, **overrides):
         }],
     }
     payload.update(overrides)
-    response = client.post("/api/roasts", json=payload)
+    return payload
+
+
+def _create_sample_roast(client, **overrides):
+    response = client.post("/api/roasts", json=_sample_roast_payload(**overrides))
     assert response.status_code == 201
     return response.get_json()
 
@@ -776,3 +780,156 @@ def test_create_app_accepts_real_secret_key(tmp_path):
 
     app = create_app(_non_test_app_config(tmp_path, "f" * 64))
     assert app.config["SECRET_KEY"] == "f" * 64
+
+
+_TINY_PNG_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
+
+
+def test_get_roasts_validates_limit(client):
+    _create_sample_roast(client, bean_name="Limit A")
+    _create_sample_roast(client, bean_name="Limit B")
+
+    for bad in ("abc", "0", "-3", "1.5", ""):
+        response = client.get(f"/api/roasts?limit={bad}")
+        assert response.status_code == 400, bad
+        assert "limit" in response.get_json()["error"]
+
+    assert len(client.get("/api/roasts?limit=1").get_json()["items"]) == 1
+    assert len(client.get("/api/roasts?limit=all").get_json()["items"]) >= 2
+
+
+def test_create_roast_rejects_malformed_curve_events_notes_and_rating(client):
+    cases = {
+        "curve not a list": {"curve": "abc"},
+        "curve point not an object": {"curve": [1, 2]},
+        "curve temperature not numeric": {"curve": [{"timestamp": "12:00:05", "temperature": "hot"}]},
+        "curve temperature null": {"curve": [{"timestamp": "12:00:05", "temperature": None}]},
+        "curve temperature boolean": {"curve": [{"timestamp": "12:00:05", "temperature": True}]},
+        "curve point missing timestamp": {"curve": [{"temperature": 200.0}]},
+        "events not a list": {"events": {"label": "First Crack"}},
+        "event not an object": {"events": ["First Crack"]},
+        "event without label": {"events": [{"detail": "no label"}]},
+        "event detail not text": {"events": [{"label": "First Crack", "detail": 5}]},
+        "notes not text": {"notes": 123},
+        "taste notes not text": {"taste_notes": ["fruity"]},
+        "rating out of range": {"rating": 9},
+        "rating not a number": {"rating": "great"},
+    }
+    before = len(client.get("/api/roasts?limit=all").get_json()["items"])
+
+    for case, overrides in cases.items():
+        response = client.post("/api/roasts", json=_sample_roast_payload(**overrides))
+        assert response.status_code == 400, case
+        assert response.get_json()["error"], case
+
+    assert len(client.get("/api/roasts?limit=all").get_json()["items"]) == before
+
+
+def test_create_roast_coerces_numeric_strings_and_nullable_fields(client):
+    roast = _create_sample_roast(
+        client,
+        curve=[{"timestamp": " 12:00:05 ", "temperature": "190.5", "flame_level": 55}],
+        events=[{"label": " First Crack ", "detail": None, "time": "2026-04-15T12:07:00Z"}],
+        notes=None,
+        taste_notes=None,
+        rating="4",
+    )
+
+    assert roast["curve"][0]["temperature"] == 190.5
+    assert roast["curve"][0]["timestamp"] == "12:00:05"
+    assert roast["events"][0]["label"] == "First Crack"
+    assert roast["events"][0]["detail"] == ""
+    assert roast["notes"] == ""
+    assert roast["taste_notes"] == ""
+    assert roast["rating"] == 4
+    assert roast["sample_count"] == 1
+
+
+def test_import_rejects_bad_curve_in_later_entry_without_saving(client):
+    good = client.get(f"/api/roasts/{_create_sample_roast(client, bean_name='Good Curve')['id']}/export").get_json()["roast"]
+    before = len(client.get("/api/roasts?limit=all").get_json()["items"])
+    bad = dict(good, bean_name="Bad Curve", curve=[{"timestamp": "12:00:05", "temperature": "hot"}])
+
+    response = client.post("/api/roasts/import", json=[good, bad])
+
+    assert response.status_code == 400
+    assert "Curve point 1" in response.get_json()["error"]
+    assert len(client.get("/api/roasts?limit=all").get_json()["items"]) == before
+
+
+def test_import_photo_failure_saves_nothing_and_removes_written_photos(client, app, monkeypatch):
+    from pathlib import Path
+
+    from app.web import routes as routes_module
+
+    before = len(client.get("/api/roasts?limit=all").get_json()["items"])
+    original_save = routes_module._save_photo_to_disk
+    written = []
+
+    def flaky_save(photo_data):
+        if written:
+            raise routes_module.PhotoSaveError("disk full")
+        filename = original_save(photo_data)
+        written.append(filename)
+        return filename
+
+    monkeypatch.setattr(routes_module, "_save_photo_to_disk", flaky_save)
+
+    response = client.post(
+        "/api/roasts/import",
+        json=[
+            _sample_roast_payload(bean_name="Photo A", photo_data=_TINY_PNG_DATA_URL),
+            _sample_roast_payload(bean_name="Photo B", photo_data=_TINY_PNG_DATA_URL),
+        ],
+    )
+
+    assert response.status_code == 500
+    assert "Nothing was imported" in response.get_json()["error"]
+    assert len(client.get("/api/roasts?limit=all").get_json()["items"]) == before
+    assert written and written[0]
+    assert not (Path(app.config["UPLOAD_FOLDER"]) / written[0]).exists()
+
+
+def test_import_db_failure_saves_nothing_and_removes_written_photos(client, app, monkeypatch):
+    from pathlib import Path
+
+    from app.web import routes as routes_module
+
+    upload_folder = Path(app.config["UPLOAD_FOLDER"])
+    files_before = set(upload_folder.iterdir())
+    roasts_before = len(client.get("/api/roasts?limit=all").get_json()["items"])
+
+    def failing_save(payloads):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(routes_module, "save_roast_sessions", failing_save)
+
+    response = client.post(
+        "/api/roasts/import",
+        json=[_sample_roast_payload(bean_name="Photo C", photo_data=_TINY_PNG_DATA_URL)],
+    )
+
+    assert response.status_code == 500
+    assert len(client.get("/api/roasts?limit=all").get_json()["items"]) == roasts_before
+    assert set(upload_folder.iterdir()) == files_before
+
+
+def test_save_roast_sessions_rolls_back_every_row_on_failure(app):
+    import sqlite3
+
+    import pytest
+
+    from app.services import roast_storage
+
+    with app.app_context():
+        before = len(roast_storage.list_roast_sessions(limit=None))
+        good = _sample_roast_payload(bean_name="Atomic", created_at="2026-04-15T12:11:00Z")
+        bad = dict(good, bean_name="Atomic Bad", started_at=None)  # violates NOT NULL on insert
+
+        with pytest.raises(sqlite3.IntegrityError):
+            roast_storage.save_roast_sessions([good, bad])
+
+        assert len(roast_storage.list_roast_sessions(limit=None)) == before

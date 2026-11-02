@@ -111,11 +111,51 @@ def _migrate_v2(connection):
 # CRUD
 # ---------------------------------------------------------------------------
 
+_INSERT_ROAST_SQL = """
+    INSERT INTO roast_sessions (
+        bean_name,
+        origin,
+        roast_level,
+        weight_grams,
+        flame_level,
+        total_roast_seconds,
+        notes,
+        taste_notes,
+        rating,
+        sample_count,
+        started_at,
+        ended_at,
+        created_at,
+        curve_json,
+        events_json,
+        photo_filename
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+
 def save_roast_session(payload):
+    return save_roast_sessions([payload])[0]
+
+
+def save_roast_sessions(payloads):
+    """Insert several roasts in one transaction: either all are saved or none."""
+    rows = [_roast_row(payload) for payload in payloads]
+    roast_ids = []
+
+    with sqlite3.connect(_database_path()) as connection:
+        for row in rows:
+            cursor = connection.execute(_INSERT_ROAST_SQL, row)
+            roast_ids.append(cursor.lastrowid)
+        connection.commit()
+
+    return [get_roast_session(roast_id) for roast_id in roast_ids]
+
+
+def _roast_row(payload):
     flame_level = _normalize_flame_level(payload.get("flame_level"))
     curve = _normalize_curve(payload.get("curve") or [], flame_level)
     events = _normalize_events(payload.get("events") or [], flame_level)
-    row = (
+    return (
         payload["bean_name"].strip(),
         payload["origin"].strip(),
         payload["roast_level"].strip(),
@@ -133,35 +173,6 @@ def save_roast_session(payload):
         json.dumps(events),
         payload.get("photo_filename", "") or "",
     )
-
-    with sqlite3.connect(_database_path()) as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO roast_sessions (
-                bean_name,
-                origin,
-                roast_level,
-                weight_grams,
-                flame_level,
-                total_roast_seconds,
-                notes,
-                taste_notes,
-                rating,
-                sample_count,
-                started_at,
-                ended_at,
-                created_at,
-                curve_json,
-                events_json,
-                photo_filename
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            row,
-        )
-        connection.commit()
-        roast_id = cursor.lastrowid
-
-    return get_roast_session(roast_id)
 
 
 def list_roast_sessions(limit=8):

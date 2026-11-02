@@ -65,7 +65,7 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Sensor faults** — In pigpio mode a failed MAX6675 read yields a `sensor_data` sample with `temperature: null` and an `error` string; simulated values are never substituted for a faulting sensor (simulation only runs when `source == "simulated"`). `_sensor_tick` broadcasts fault samples (throttled warning log) and counts them as failures. Pages render `-- °C` via `hasSensorTemperature()` in `live_charts.js`; the roast session skips the point (gap in the curve), logs one deduped `Sensor fault` hardware-issue event through `reportSensorFault()` (shared with the health poll), and logs `Sensor Recovered` when readings resume.
 
-**Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before saving any (no partial imports), drops incoming `id`s, and assigns fresh ones. `create_roast` and `import_roasts` share `_normalize_roast_payload` for field coercion/validation.
+**Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before touching disk or DB, then writes all photos and inserts all rows in one transaction (`save_roast_sessions`); any failure removes the written photos and imports nothing. Incoming `id`s are dropped and fresh ones assigned. `create_roast` and `import_roasts` share `_normalize_roast_payload`, which also type-checks `curve` (list of `{timestamp: str, temperature: finite number}`), `events` (list of objects with a non-empty `label`), `notes`/`taste_notes` (text or null), and `rating` (1–5 or null), coercing numeric strings in place so a bad record is a 400, never a 500.
 
 **Rate-of-rise & turn point** — Client-side only, in `live_charts.js`. `buildRorSeries(curve, {windowSeconds})` returns smoothed RoR points; `enableRorOverlay(chart)` adds a second dataset on the right-hand `y1` axis (temperature stays dataset 0 so `stageMarkerPlugin` is unaffected). `detectTurningPoint(curve, {startedAt, riseThreshold})` returns the confirmed post-charge minimum, drawn as a stage marker by `rebuildStageMarkers` in `roast_session.js`. No server storage — these are derived from the saved curve.
 
@@ -90,7 +90,7 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 ## API Surface
 
 ```
-GET  /api/roasts                list saved roasts
+GET  /api/roasts                list saved roasts (?limit=N|all, default 8; bad limit → 400)
 POST /api/roasts                save roast + curve + photo
 GET  /api/roasts/<id>           roast detail with curve + events
 PATCH /api/roasts/<id>          update metadata, notes, rating, tasting notes
@@ -108,7 +108,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 65 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+All tests use an in-memory SQLite DB and disable the background sensor task. 72 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
 
 ## Common Gotchas
 
