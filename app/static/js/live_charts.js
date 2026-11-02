@@ -464,3 +464,10 @@ function buildRoastAnalytics(curve = [], events = [], options = {}) {
         currentRor,
     };
 }
+
+// True when a sensor_data payload carries a real reading. Fault samples from
+// hardware arrive with temperature null and an error string.
+function hasSensorTemperature(data) {
+    return Boolean(data) && data.temperature !== null && data.temperature !== undefined
+        && Number.isFinite(Number(data.temperature));
+}

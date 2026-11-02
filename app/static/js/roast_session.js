@@ -50,6 +50,7 @@ let lastLoggedFlameLevel = Number(flameControlEl.value);
 let screenWakeLock = null;
 let turnPointAlerted = false;
 let rorCrashAlerted = false;
+let sensorFaultActive = false;
 
 function formatNow() {
     return new Date().toLocaleTimeString([], {
@@ -304,7 +305,7 @@ function addEvent(label, detail, options = {}) {
         showMarker: Boolean(options.showMarker),
         chartLabel: options.chartLabel || null,
         color: options.color || "#7f3417",
-        temperature: latestSensorData ? Number(latestSensorData.temperature) : null,
+        temperature: hasSensorTemperature(latestSensorData) ? Number(latestSensorData.temperature) : null,
         flame_level: options.flameLevel ?? currentFlameLevel(),
     };
     roastEvents.push(event);
@@ -330,6 +331,28 @@ function recordHardwareIssue(detail, options = {}) {
     notifyRoast("Hardware issue", detail, "error");
 }
 
+// Shared by the live sensor stream and the health poll so one fault is logged
+// once (recordHardwareIssue dedupes on text + code).
+function reportSensorFault(errorText) {
+    sensorFaultActive = true;
+    recordHardwareIssue(`Sensor fault: ${errorText}.`, { code: "sensor-fault" });
+}
+
+function clearSensorFault() {
+    if (!sensorFaultActive) {
+        return;
+    }
+    sensorFaultActive = false;
+    lastHardwareIssueKey = null;
+    roastLatestIssueEl.style.display = "none";
+    roastLatestIssueTextEl.textContent = "";
+    roastHardwarePanelEl.classList.remove("panel-alert");
+    if (roastRecording && !roastFinished) {
+        addEvent("Sensor Recovered", "Thermocouple readings resumed.", { color: "#2a7f86" });
+    }
+    notifyRoast("Sensor recovered", "Thermocouple readings resumed.", "success");
+}
+
 function clearRoastGraph() {
     roastCurve.length = 0;
     setChartSeries(roastChart, []);
@@ -340,12 +363,18 @@ function clearRoastGraph() {
 
 function updateLiveTemperature(data) {
     latestSensorData = data;
-    temperatureValueEl.textContent = `${Number(data.temperature).toFixed(1)} °C`;
+    temperatureValueEl.textContent = hasSensorTemperature(data)
+        ? `${Number(data.temperature).toFixed(1)} °C`
+        : "-- °C";
     sensorSourceEl.textContent = data.source || "Unknown";
     lastUpdatedEl.textContent = data.timestamp;
 }
 
 function captureTemperature(data) {
+    if (!hasSensorTemperature(data)) {
+        return;
+    }
+
     roastCurve.push({
         timestamp: data.timestamp,
         temperature: Number(data.temperature),
@@ -459,12 +488,7 @@ async function loadRoastHardwareHealth() {
         roastLatestIssueTextEl.textContent = "";
         roastHardwarePanelEl.classList.remove("panel-alert");
     } else {
-        recordHardwareIssue(
-            health.last_temperature_error
-                ? `Health check failed: ${health.last_temperature_error}.`
-                : "Health check failed: sensor or servo controller is offline.",
-            { code: "health-check" }
-        );
+        reportSensorFault(health.last_temperature_error || "sensor or servo controller is offline");
     }
 }
 
@@ -499,6 +523,12 @@ roastSessionSocket.on("sensor_state", (state) => {
 
 roastSessionSocket.on("sensor_data", (data) => {
     updateLiveTemperature(data);
+    if (data.error) {
+        // Hardware fault: show it and leave a gap in the curve. Never plot a stand-in value.
+        reportSensorFault(data.error);
+        return;
+    }
+    clearSensorFault();
     if (roastRecording && !roastFinished) {
         captureTemperature(data);
     }

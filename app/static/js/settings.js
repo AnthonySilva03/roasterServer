@@ -120,7 +120,9 @@ settingsSocket.on("disconnect", () => {
 });
 
 settingsSocket.on("sensor_data", (data) => {
-    tempValueEl.textContent = `${Number(data.temperature).toFixed(1)} °C`;
+    tempValueEl.textContent = hasSensorTemperature(data)
+        ? `${Number(data.temperature).toFixed(1)} °C`
+        : "-- °C";
     sensorSourceEl.textContent = data.source || "Unknown";
     lastUpdatedEl.textContent = data.timestamp || "--";
 });

@@ -68,3 +68,44 @@ def test_sensor_tick_skips_when_paused(monkeypatch):
 
     assert sensor.calls == 0
     assert emitted == []
+
+
+class FaultingSensor:
+    """Returns open-circuit fault samples, then a real reading."""
+
+    active = True
+
+    def __init__(self, faults=1):
+        self.calls = 0
+        self.faults = faults
+
+    def read_sample(self):
+        self.calls += 1
+        if self.calls <= self.faults:
+            return {
+                "timestamp": "00:00:00",
+                "temperature": None,
+                "source": "pigpio-max6675",
+                "flame_level": 50,
+                "error": "Thermocouple open circuit",
+            }
+        return {"timestamp": "00:00:02", "temperature": 180.0, "source": "pigpio-max6675", "flame_level": 50}
+
+
+def test_sensor_tick_broadcasts_fault_samples_and_counts_them(monkeypatch):
+    sensor = FaultingSensor(faults=2)
+    emitted = _wire(monkeypatch, sensor)
+
+    sockets_module._sensor_tick()
+    sockets_module._sensor_tick()
+
+    assert [payload.get("error") for _, payload in emitted] == ["Thermocouple open circuit"] * 2
+    assert all(payload["temperature"] is None for _, payload in emitted)
+    assert sockets_module.consecutive_read_failures == 2
+    assert sockets_module.latest_sample["error"] == "Thermocouple open circuit"
+
+    sockets_module._sensor_tick()
+
+    assert sockets_module.consecutive_read_failures == 0
+    assert emitted[-1][1]["temperature"] == 180.0
+    assert "error" not in emitted[-1][1]

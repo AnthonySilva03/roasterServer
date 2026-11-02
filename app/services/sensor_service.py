@@ -71,20 +71,29 @@ class SensorService:
         self.set_flame_level(50)
 
     def read_sample(self) -> dict:
-        temperature = self._read_temperature()
-        if temperature is None:
+        """Return the current sample.
+
+        In hardware mode a failed thermocouple read yields ``temperature``
+        None plus an ``error`` message. Simulated values are only produced
+        when no hardware is attached (``source`` == "simulated"), never as a
+        stand-in for a faulting sensor.
+        """
+        if self._pi:
+            temperature = self._read_temperature()
+        else:
             temperature = self._next_simulated_value(
                 "_sim_temperature", 0.9, 188.0, 225.0
             )
-        else:
-            self._sim_temperature = temperature
 
-        return {
+        sample = {
             "timestamp": time.strftime("%H:%M:%S"),
-            "temperature": round(temperature, 2),
+            "temperature": None if temperature is None else round(temperature, 2),
             "source": self.source_name,
             "flame_level": self._current_flame_level,
         }
+        if temperature is None:
+            sample["error"] = self._last_temperature_error or "Thermocouple read failed"
+        return sample
 
     def set_flame_level(self, flame_level: int | float) -> dict:
         bounded_flame_level = max(0, min(100, int(round(float(flame_level)))))

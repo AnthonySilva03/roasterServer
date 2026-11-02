@@ -63,6 +63,8 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Hardware health** — In pigpio mode `SensorService.health_status()` reports the sensor loop's most recent MAX6675 read (fresh within `_FRESH_READ_INTERVALS` × `interval_seconds`) instead of reading the chip itself; it only reads directly when the loop is paused, not yet started, or failing. Every bit-banged read holds `_bus_lock`, so a direct read can never interleave its clock pulses with the loop's under eventlet. Health is polled every 10 s by the roast session, the dashboard, and the settings page.
 
+**Sensor faults** — In pigpio mode a failed MAX6675 read yields a `sensor_data` sample with `temperature: null` and an `error` string; simulated values are never substituted for a faulting sensor (simulation only runs when `source == "simulated"`). `_sensor_tick` broadcasts fault samples (throttled warning log) and counts them as failures. Pages render `-- °C` via `hasSensorTemperature()` in `live_charts.js`; the roast session skips the point (gap in the curve), logs one deduped `Sensor fault` hardware-issue event through `reportSensorFault()` (shared with the health poll), and logs `Sensor Recovered` when readings resume.
+
 **Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before saving any (no partial imports), drops incoming `id`s, and assigns fresh ones. `create_roast` and `import_roasts` share `_normalize_roast_payload` for field coercion/validation.
 
 **Rate-of-rise & turn point** — Client-side only, in `live_charts.js`. `buildRorSeries(curve, {windowSeconds})` returns smoothed RoR points; `enableRorOverlay(chart)` adds a second dataset on the right-hand `y1` axis (temperature stays dataset 0 so `stageMarkerPlugin` is unaffected). `detectTurningPoint(curve, {startedAt, riseThreshold})` returns the confirmed post-charge minimum, drawn as a stage marker by `rebuildStageMarkers` in `roast_session.js`. No server storage — these are derived from the saved curve.
@@ -106,7 +108,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 62 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
+All tests use an in-memory SQLite DB and disable the background sensor task. 65 tests currently pass. Extend `test_app.py` for new routes or storage behavior; extend `test_sensor_service.py` for hardware mode changes.
 
 ## Common Gotchas
 

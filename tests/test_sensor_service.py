@@ -199,3 +199,25 @@ def test_temperature_read_holds_bus_lock(monkeypatch):
 
     assert sensor.read_sample()["temperature"] == 100.0
     assert not sensor._bus_lock.locked()
+
+
+def test_pigpio_open_circuit_sample_reports_fault_not_fake_value(monkeypatch):
+    fake_pi = FakePi(bits=bits_for_word(0x0004))
+    sensor = _pigpio_sensor(monkeypatch, fake_pi)
+
+    sample = sensor.read_sample()
+
+    assert sample["temperature"] is None
+    assert sample["error"] == "Thermocouple open circuit"
+    assert sample["source"] == "pigpio-max6675"
+    assert sample["flame_level"] == 50
+
+
+def test_pigpio_good_read_sample_has_no_error(monkeypatch):
+    fake_pi = FakePi(bits=bits_for_word(0x0C80))
+    sensor = _pigpio_sensor(monkeypatch, fake_pi)
+
+    sample = sensor.read_sample()
+
+    assert sample["temperature"] == 100.0
+    assert "error" not in sample

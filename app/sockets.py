@@ -85,6 +85,20 @@ def _sensor_tick():
             )
         return
 
+    if sample.get("error"):
+        # Hardware fault (e.g. open thermocouple). Broadcast it so clients show
+        # the fault instead of a stale or fabricated temperature.
+        consecutive_read_failures += 1
+        if consecutive_read_failures == 1 or consecutive_read_failures % sensor_log_every_n == 0:
+            logger.warning(
+                "Sensor fault (%s consecutive): %s",
+                consecutive_read_failures,
+                sample["error"],
+            )
+        latest_sample = sample
+        _broadcast_sample(sample)
+        return
+
     if consecutive_read_failures:
         logger.info("Sensor read recovered after %s failed attempt(s)", consecutive_read_failures)
         consecutive_read_failures = 0
@@ -100,8 +114,12 @@ def _sensor_tick():
             latest_sample["flame_level"],
         )
 
+    _broadcast_sample(latest_sample)
+
+
+def _broadcast_sample(sample):
     try:
-        socketio.emit("sensor_data", latest_sample)
+        socketio.emit("sensor_data", sample)
     except Exception:
         logger.exception("Failed to broadcast sensor sample; sensor loop continuing")
 
