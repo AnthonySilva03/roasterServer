@@ -170,17 +170,7 @@ sudo ./scripts/install_pi_service.sh
 sudo systemctl start roaster-server.service
 ```
 
-To let the app save Wi-Fi credentials through `nmcli`, add `/etc/sudoers.d/roaster-server` with:
-
-```sudoers
-pi ALL=(root) NOPASSWD: /usr/bin/nmcli
-```
-
-Validate it with:
-
-```bash
-sudo visudo -cf /etc/sudoers.d/roaster-server
-```
+`install_pi_service.sh` also installs `deploy/sudoers-roaster-server` to `/etc/sudoers.d/roaster-server` after a `visudo -cf` check. It grants the `pi` user passwordless `nmcli`, so the setup page can save Wi-Fi credentials, and passwordless `systemctl restart roaster-server.service`, so deploys can restart the app without a terminal.
 
 The service launches `scripts/wifi_provisioning_bootstrap.sh`, so startup behavior is:
 

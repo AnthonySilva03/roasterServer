@@ -1,0 +1,5 @@
+# Installed to /etc/sudoers.d/roaster-server by scripts/install_pi_service.sh.
+# Lets the service user drive Wi-Fi via nmcli (setup page) and restart the app
+# service for deploys without a password. Nothing else is granted.
+pi ALL=(root) NOPASSWD: /usr/bin/nmcli
+pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart roaster-server.service

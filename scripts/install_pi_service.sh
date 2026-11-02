@@ -12,6 +12,8 @@ UNIT_TEMPLATE="$INSTALL_ROOT/deploy/roaster-server.service"
 DNSMASQ_TEMPLATE="$INSTALL_ROOT/deploy/dnsmasq-shared-roaster.conf"
 DNSMASQ_DIR="/etc/NetworkManager/dnsmasq-shared.d"
 DNSMASQ_PATH="$DNSMASQ_DIR/roaster-captive.conf"
+SUDOERS_TEMPLATE="$INSTALL_ROOT/deploy/sudoers-roaster-server"
+SUDOERS_PATH="/etc/sudoers.d/roaster-server"
 
 if [ ! -f "$UNIT_TEMPLATE" ]; then
     echo "Missing service template: $UNIT_TEMPLATE" >&2
@@ -30,6 +32,18 @@ if [ -f "$DNSMASQ_TEMPLATE" ]; then
     mkdir -p "$DNSMASQ_DIR"
     install -m 644 "$DNSMASQ_TEMPLATE" "$DNSMASQ_PATH"
     echo "Installed captive-portal DNS config to $DNSMASQ_PATH"
+fi
+
+# Passwordless nmcli (Wi-Fi setup page) and service restart (deploys) for the
+# service user. visudo must accept the file before it goes anywhere near sudoers.d.
+if [ -f "$SUDOERS_TEMPLATE" ]; then
+    if visudo -cf "$SUDOERS_TEMPLATE" >/dev/null; then
+        install -m 440 -o root -g root "$SUDOERS_TEMPLATE" "$SUDOERS_PATH"
+        echo "Installed sudoers rules to $SUDOERS_PATH"
+    else
+        echo "Refusing to install $SUDOERS_TEMPLATE: visudo rejected it" >&2
+        exit 1
+    fi
 fi
 
 systemctl daemon-reload

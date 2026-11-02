@@ -67,16 +67,11 @@ WIFI_CONNECT_WAIT_SECONDS=20
 WIFI_USE_SUDO_FOR_NMCLI=true
 ```
 
-4. Allow the app to run `nmcli` without a password prompt. Create `/etc/sudoers.d/roaster-server` with:
-
-```sudoers
-pi ALL=(root) NOPASSWD: /usr/bin/nmcli
-```
-
-Validate it:
+4. Grant the service user its two passwordless sudo rules: `nmcli` (so the Wi-Fi setup page can save credentials) and `systemctl restart roaster-server.service` (so deploys can restart the app without a terminal). `scripts/install_pi_service.sh` in step 5 validates and installs `deploy/sudoers-roaster-server` to `/etc/sudoers.d/roaster-server`. To do it by hand:
 
 ```bash
-sudo visudo -cf /etc/sudoers.d/roaster-server
+sudo visudo -cf deploy/sudoers-roaster-server
+sudo install -m 440 deploy/sudoers-roaster-server /etc/sudoers.d/roaster-server
 ```
 
 5. Install and enable the startup service:
@@ -172,6 +167,21 @@ In `provision` mode, onboard home Wi-Fi from the phone:
 1. Connect to the setup hotspot SSID
 2. Open `http://10.42.0.1:5000/setup/wifi`
 3. Choose your home Wi-Fi and enter the password — NetworkManager remembers it for future boots
+
+## Deploying Updates
+
+The Pi has no GitHub credentials, so push to it directly from a workstation
+that can already SSH in. `master` is checked out on the Pi, so push to a
+temporary ref and fast-forward there:
+
+```bash
+git push pi@<pi-address>:roasterServer master:refs/heads/deploy-tmp
+ssh pi@<pi-address> 'cd ~/roasterServer && git merge --ff-only deploy-tmp && git branch -d deploy-tmp'
+ssh pi@<pi-address> sudo -n systemctl restart roaster-server.service   # passwordless via the sudoers rule
+```
+
+Static files (JS, CSS, the service worker) are served from disk, so a change
+that touches only those needs no restart. Python changes do.
 
 ## Useful Service Commands
 
