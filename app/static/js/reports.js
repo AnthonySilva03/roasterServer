@@ -141,7 +141,7 @@ function downloadCsv() {
 
 async function loadReport() {
     const settings = getRoastSettings();
-    reportAucBaseEl.textContent = String(settings.aucBaseC);
+    reportAucBaseEl.textContent = `${settings.aucBaseC} °C`;
     const response = await fetch(`/api/roasts/report?auc_base=${encodeURIComponent(settings.aucBaseC)}`);
     if (!response.ok) {
         throw new Error("report unavailable");
