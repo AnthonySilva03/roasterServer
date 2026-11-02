@@ -11,6 +11,10 @@ const ROAST_SETTINGS_DEFAULTS = Object.freeze({
     dryEndTargetC: 150,        // used for the drying-phase ETA projection
     firstCrackTargetC: 196,    // used for the first-crack ETA projection
     aucBaseC: 150,             // base temperature for area-under-curve
+    autoCharge: false,         // mark Charge when the probe drops sharply after Pre Roast
+    autoDryEnd: false,         // mark Dry End when the probe reaches dryEndTargetC
+    autoFirstCrack: false,     // mark First Crack when the probe reaches firstCrackTargetC
+    autoChargeDropC: 8,        // temperature fall (°C) within 10 s that counts as a charge
 });
 
 function getRoastSettings() {
@@ -23,12 +27,79 @@ function getRoastSettings() {
     }
     const settings = { ...ROAST_SETTINGS_DEFAULTS };
     Object.keys(ROAST_SETTINGS_DEFAULTS).forEach((key) => {
-        const value = Number(stored?.[key]);
+        const raw = stored?.[key];
+        if (typeof ROAST_SETTINGS_DEFAULTS[key] === "boolean") {
+            if (typeof raw === "boolean") {
+                settings[key] = raw;
+            }
+            return;
+        }
+        const value = Number(raw);
         if (Number.isFinite(value) && value > 0) {
             settings[key] = value;
         }
     });
     return settings;
+}
+
+// Local wall-clock HH:MM:SS for a sample timestamp (ISO or legacy clock string).
+function formatClock(value) {
+    const date = parseRoastTimestamp(value);
+    if (!date) {
+        return value ? String(value) : "--";
+    }
+    return date.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+// Artisan's autoCHARGE: after Pre Roast the probe reads the hot drum, then
+// falls sharply when the beans go in. Returns the peak sample just before a
+// fall of at least dropC within windowSeconds, or null. Only the most recent
+// windowSeconds of the curve are considered so an old dip is not re-detected.
+function detectAutoCharge(curve = [], options = {}) {
+    const dropC = Number.isFinite(options.dropC) ? options.dropC : 8;
+    const windowSeconds = Number.isFinite(options.windowSeconds) ? options.windowSeconds : 10;
+    const minPeakC = Number.isFinite(options.minPeakC) ? options.minPeakC : 120;
+    const points = normalizeCurve(curve, options);
+    if (points.length < 3) {
+        return null;
+    }
+    const latest = points[points.length - 1];
+    let peak = null;
+    for (let i = points.length - 2; i >= 0; i -= 1) {
+        const point = points[i];
+        if ((latest.time.getTime() - point.time.getTime()) / 1000 > windowSeconds) {
+            break;
+        }
+        if (!peak || point.temperature > peak.temperature) {
+            peak = point;
+        }
+    }
+    if (!peak || peak.temperature < minPeakC) {
+        return null;
+    }
+    if (peak.temperature - latest.temperature < dropC) {
+        return null;
+    }
+    return { timestamp: peak.timestamp, temperature: peak.temperature, time: peak.time };
+}
+
+// Auto Dry End / First Crack: fire once the probe reaches the target while
+// climbing (after the turning point) and the event is not yet marked.
+function shouldAutoMarkThreshold(curve = [], events = [], role, targetC, options = {}) {
+    if (!Number.isFinite(targetC) || findRoastEvent(events, role)) {
+        return false;
+    }
+    const points = normalizeCurve(curve, options);
+    if (points.length < 2) {
+        return false;
+    }
+    const latest = points[points.length - 1];
+    const previous = points[points.length - 2];
+    if (latest.temperature < targetC || latest.temperature < previous.temperature) {
+        return false;
+    }
+    const turn = detectTurningPoint(curve, options);
+    return Boolean(turn) && latest.time.getTime() > parseRoastTimestamp(turn.timestamp, options.startedAt || options.anchorDate)?.getTime();
 }
 
 function saveRoastSettings(partial) {
@@ -1140,6 +1211,9 @@ if (typeof module !== "undefined" && module.exports) {
         buildRoastAnalytics,
         formatDuration,
         formatMinutesTick,
+        formatClock,
+        detectAutoCharge,
+        shouldAutoMarkThreshold,
         hasSensorTemperature,
         escapeHtml,
     };

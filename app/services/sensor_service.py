@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import threading
 import time
+from datetime import datetime, timezone
 
 try:
     import pigpio
@@ -24,13 +25,19 @@ _FRESH_READ_INTERVALS = 2.0
 
 
 def _sample_timestamp(now: float | None = None) -> str:
-    """Wall-clock sample time as HH:MM:SS.mmm (local time)."""
+    """Sample time as an ISO 8601 UTC instant with milliseconds, e.g.
+    2026-11-02T10:00:00.250Z. Being an absolute instant it needs no anchor
+    date and does not depend on the Pi and the browser sharing a timezone
+    (older roasts carry local "HH:MM:SS[.mmm]" stamps, still accepted by the
+    parsers)."""
     now = time.time() if now is None else now
-    millis = int(round((now - int(now)) * 1000))
-    if millis >= 1000:  # rounding carried into the next second
-        now += 1
-        millis = 0
-    return f"{time.strftime('%H:%M:%S', time.localtime(now))}.{millis:03d}"
+    moment = datetime.fromtimestamp(now, tz=timezone.utc)
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
+
+
+# Thermocouple offset bounds (°C) accepted from the settings page.
+MIN_TEMPERATURE_OFFSET_C = -20.0
+MAX_TEMPERATURE_OFFSET_C = 20.0
 
 
 class SensorService:
@@ -63,6 +70,12 @@ class SensorService:
         self._pi = self._connect_pigpio()
         self._last_temperature_error = None
         self._sim_temperature = 202.0
+        # Added to every hardware reading (probe calibration against a
+        # reference thermometer). Persisted by calibration.py.
+        self.temperature_offset_c = 0.0
+        # Simulated-mode replay of a saved roast curve: {"points": [(s, °C)],
+        # "roast_id", "label", "started_monotonic", "total_seconds"}.
+        self._replay = None
 
     @property
     def source_name(self) -> str:
@@ -78,7 +91,72 @@ class SensorService:
 
     def reset(self) -> None:
         self._sim_temperature = 202.0
+        self._replay = None
         self.set_flame_level(50)
+
+    # --- probe offset -----------------------------------------------------------
+
+    def set_temperature_offset(self, offset_c: float) -> dict:
+        value = float(offset_c)
+        if value != value or value < MIN_TEMPERATURE_OFFSET_C or value > MAX_TEMPERATURE_OFFSET_C:
+            raise ValueError(
+                f"Temperature offset must be between {MIN_TEMPERATURE_OFFSET_C:g} and {MAX_TEMPERATURE_OFFSET_C:g} °C."
+            )
+        self.temperature_offset_c = round(value, 2)
+        return {"temperature_offset_c": self.temperature_offset_c}
+
+    # --- simulated replay -----------------------------------------------------------
+
+    def set_replay(self, points, roast_id=None, label="") -> dict:
+        """Replay a saved curve in simulated mode. ``points`` is a list of
+        (elapsed_seconds, temperature) in ascending order; the curve loops."""
+        if self._pi:
+            raise RuntimeError("Replay is only available in simulated mode.")
+        cleaned = sorted(
+            (float(seconds), float(temperature))
+            for seconds, temperature in points
+            if seconds is not None and temperature is not None
+        )
+        if len(cleaned) < 2:
+            raise ValueError("A replay needs at least two curve points.")
+        self._replay = {
+            "points": cleaned,
+            "roast_id": roast_id,
+            "label": label,
+            "started_monotonic": time.monotonic(),
+            "total_seconds": cleaned[-1][0] - cleaned[0][0],
+        }
+        return self.replay_status()
+
+    def clear_replay(self) -> dict:
+        self._replay = None
+        return self.replay_status()
+
+    def replay_status(self) -> dict | None:
+        if not self._replay:
+            return None
+        elapsed = (time.monotonic() - self._replay["started_monotonic"])
+        total = self._replay["total_seconds"]
+        return {
+            "roast_id": self._replay["roast_id"],
+            "label": self._replay["label"],
+            "elapsed_seconds": round(elapsed % total, 1) if total > 0 else 0.0,
+            "total_seconds": round(total, 1),
+            "loop": int(elapsed // total) + 1 if total > 0 else 1,
+        }
+
+    def _replay_temperature(self, now_monotonic: float | None = None) -> float:
+        replay = self._replay
+        points = replay["points"]
+        total = replay["total_seconds"]
+        now_monotonic = time.monotonic() if now_monotonic is None else now_monotonic
+        elapsed = now_monotonic - replay["started_monotonic"]
+        position = points[0][0] + (elapsed % total if total > 0 else 0.0)
+        for (t0, temp0), (t1, temp1) in zip(points, points[1:]):
+            if t0 <= position <= t1:
+                span = t1 - t0
+                return temp0 if span <= 0 else temp0 + (temp1 - temp0) * (position - t0) / span
+        return points[-1][1]
 
     def read_sample(self) -> dict:
         """Return the current sample.
@@ -90,14 +168,17 @@ class SensorService:
         """
         if self._pi:
             temperature = self._read_temperature()
+            if temperature is not None:
+                temperature += self.temperature_offset_c
+        elif self._replay:
+            temperature = self._replay_temperature()
         else:
             temperature = self._next_simulated_value(
                 "_sim_temperature", 0.9, 188.0, 225.0
             )
 
         sample = {
-            # Wall-clock with milliseconds so the rate-of-rise slope is not
-            # quantised to whole seconds (the chart parses HH:MM:SS[.mmm]).
+            # ISO UTC instant with milliseconds (see _sample_timestamp).
             "timestamp": _sample_timestamp(),
             "temperature": None if temperature is None else round(temperature, 2),
             "source": self.source_name,
@@ -148,6 +229,8 @@ class SensorService:
             "flame_level": self._current_flame_level,
             "servo_min_pulsewidth": self.servo_min_pulsewidth,
             "servo_max_pulsewidth": self.servo_max_pulsewidth,
+            "temperature_offset_c": self.temperature_offset_c,
+            "replay": self.replay_status(),
         }
 
         if self.sensor_mode != "pigpio":

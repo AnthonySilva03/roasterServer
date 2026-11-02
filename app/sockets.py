@@ -1,4 +1,5 @@
 import logging
+import time
 
 from flask_socketio import emit
 
@@ -24,12 +25,23 @@ sensor_fault_flame_after = 5
 over_temperature_active = False
 _OVER_TEMP_REARM_MARGIN_C = 5.0
 
+# Client-disconnect watchdog: with no browser connected for this long while
+# the flame is above 0%, cut it (0 disables).
+client_disconnect_flame_timeout_seconds = 0.0
+connected_clients = 0
+last_client_disconnect_monotonic = None
+disconnect_cutoff_done = False
+
 
 def register_socket_handlers(app):
     global sensor_interval_seconds, sensor_service, sensor_log_every_n
     global max_bean_temp_c, sensor_fault_flame_policy, sensor_fault_flame_after
+    global client_disconnect_flame_timeout_seconds
 
     sensor_interval_seconds = app.config["SENSOR_INTERVAL_SECONDS"]
+    client_disconnect_flame_timeout_seconds = float(
+        app.config.get("CLIENT_DISCONNECT_FLAME_TIMEOUT_SECONDS", 0) or 0
+    )
     sensor_log_every_n = max(1, int(app.config.get("SENSOR_LOG_EVERY_N", 10)))
     max_bean_temp_c = float(app.config.get("MAX_BEAN_TEMP_C", 0) or 0)
     sensor_fault_flame_policy = str(app.config.get("SENSOR_FAULT_FLAME_POLICY", "hold") or "hold").lower()
@@ -48,6 +60,11 @@ def register_socket_handlers(app):
             servo_min_pulsewidth=calibration.get("servo_min_pulsewidth", app.config["SERVO_MIN_PULSEWIDTH"]),
             servo_max_pulsewidth=calibration.get("servo_max_pulsewidth", app.config["SERVO_MAX_PULSEWIDTH"]),
         )
+        if "temperature_offset_c" in calibration:
+            try:
+                sensor_service.set_temperature_offset(calibration["temperature_offset_c"])
+            except ValueError:
+                logger.warning("Ignoring out-of-range saved temperature offset %r", calibration["temperature_offset_c"])
         logger.info(
             "Sensor service initialized mode=%s interval=%.2fs flame_level=%s",
             app.config["SENSOR_MODE"],
@@ -127,6 +144,7 @@ def _sensor_tick():
     latest_sample = sample
     sample_counter += 1
     _check_over_temperature(sample)
+    _check_client_watchdog(sample)
     if sample_counter == 1 or sample_counter % sensor_log_every_n == 0:
         logger.info(
             "Sensor sample #%s temperature=%s source=%s flame_level=%s",
@@ -204,17 +222,50 @@ def _safety_cutoff(kind, message, sample):
         logger.exception("Safety cutoff failed; sensor loop continuing")
 
 
+def _check_client_watchdog(sample):
+    """Cut the flame once if every browser has been gone for the timeout."""
+    global disconnect_cutoff_done
+
+    if client_disconnect_flame_timeout_seconds <= 0 or connected_clients > 0:
+        return
+    if last_client_disconnect_monotonic is None or disconnect_cutoff_done:
+        return
+    gone_for = time.monotonic() - last_client_disconnect_monotonic
+    if gone_for < client_disconnect_flame_timeout_seconds:
+        return
+    disconnect_cutoff_done = True
+    _safety_cutoff(
+        "client_disconnected",
+        f"No browser connected for {int(gone_for)} s; flame cut to 0%.",
+        sample,
+    )
+
+
 def safety_settings():
     return {
         "max_bean_temp_c": max_bean_temp_c,
         "sensor_fault_flame_policy": sensor_fault_flame_policy,
         "sensor_fault_flame_after": sensor_fault_flame_after,
         "over_temperature_active": over_temperature_active,
+        "client_disconnect_flame_timeout_seconds": client_disconnect_flame_timeout_seconds,
+        "connected_clients": connected_clients,
     }
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    global connected_clients, last_client_disconnect_monotonic
+    connected_clients = max(0, connected_clients - 1)
+    if connected_clients == 0:
+        last_client_disconnect_monotonic = time.monotonic()
+    logger.info("Socket client disconnected; %s still connected", connected_clients)
 
 
 @socketio.on("connect")
 def handle_connect():
+    global connected_clients, disconnect_cutoff_done
+    connected_clients += 1
+    disconnect_cutoff_done = False
     logger.info(
         "Socket client connected active=%s source=%s",
         sensor_service.active if sensor_service else False,

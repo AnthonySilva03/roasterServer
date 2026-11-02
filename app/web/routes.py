@@ -12,6 +12,7 @@ from flask import Blueprint, Response, abort, current_app, jsonify, redirect, re
 from app import sockets as sockets_module
 from app.services import roast_math
 from app.services.roast_storage import (
+    ROAST_LIST_FIELDS,
     ROAST_PROPERTY_FIELDS,
     delete_roast_session,
     get_roast_session,
@@ -321,8 +322,12 @@ def patch_roast(roast_id):
             current_app.logger.warning("Rejected roast feedback update due to rating bounds", extra={"roast_id": roast_id, "rating": normalized_rating})
             return jsonify({"error": "Rating must be between 1 and 5."}), 400
 
-    # Post-roast properties: only the fields present in the request are changed.
-    properties = {field: payload[field] for field in ROAST_PROPERTY_FIELDS if field in payload}
+    # Post-roast properties and tag lists: only the fields present in the request are changed.
+    properties = {
+        field: payload[field]
+        for field in ROAST_PROPERTY_FIELDS + ROAST_LIST_FIELDS
+        if field in payload
+    }
     property_error = _normalize_roast_properties(properties, only_present=True)
     if property_error:
         current_app.logger.warning(
@@ -508,7 +513,36 @@ def _normalize_roast_properties(payload, only_present=False):
             return f"{label} must be {_PROPERTY_TEXT_MAX} characters or fewer."
         payload[field] = text
 
+    for field, label in _LIST_PROPERTIES:
+        if only_present and field not in payload:
+            continue
+        value = payload.get(field)
+        if value is None:
+            payload[field] = []
+            continue
+        if not isinstance(value, list):
+            return f"{label} must be a list of short text labels."
+        cleaned = []
+        for item in value:
+            if not isinstance(item, str):
+                return f"{label} must contain only text labels."
+            text = item.strip()
+            if not text:
+                continue
+            if len(text) > _TAG_TEXT_MAX:
+                return f"Each {label.lower()} label must be {_TAG_TEXT_MAX} characters or fewer."
+            if text.lower() not in (existing.lower() for existing in cleaned):
+                cleaned.append(text)
+        if len(cleaned) > _TAG_LIST_MAX:
+            return f"{label} may hold at most {_TAG_LIST_MAX} labels."
+        payload[field] = cleaned
+
     return None
+
+
+_TAG_TEXT_MAX = 40
+_TAG_LIST_MAX = 30
+_LIST_PROPERTIES = (("flavor_tags", "Flavour tags"), ("defect_flags", "Defect flags"))
 
 
 def _normalize_curve_points(payload):
@@ -635,6 +669,7 @@ _EXPORT_FIELDS = [
     "curve",
     "events",
     *ROAST_PROPERTY_FIELDS,
+    *ROAST_LIST_FIELDS,
 ]
 
 
@@ -1064,3 +1099,69 @@ def set_sensor_calibration():
     save_calibration(current_app, min_pw, max_pw)
     current_app.logger.info("Saved servo calibration", extra={"min": min_pw, "max": max_pw})
     return jsonify(result)
+
+
+@main.route("/api/sensor/offset", methods=["POST"])
+def set_temperature_offset():
+    """Persist a thermocouple offset (°C) added to every hardware reading."""
+    if sockets_module.sensor_service is None:
+        return jsonify({"error": "Sensor service is not ready yet."}), 503
+
+    payload = request.get_json(silent=True) or {}
+    offset = roast_math._number(payload.get("temperature_offset_c"))
+    if offset is None:
+        return jsonify({"error": "Temperature offset must be a number in °C."}), 400
+
+    try:
+        result = sockets_module.sensor_service.set_temperature_offset(offset)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    save_calibration(current_app, temperature_offset_c=result["temperature_offset_c"])
+    current_app.logger.info("Saved temperature offset", extra={"offset_c": result["temperature_offset_c"]})
+    return jsonify(result)
+
+
+@main.route("/api/sensor/replay", methods=["POST"])
+def start_sensor_replay():
+    """Simulated mode only: replay a saved roast's curve as the live sensor."""
+    if sockets_module.sensor_service is None:
+        return jsonify({"error": "Sensor service is not ready yet."}), 503
+    if sockets_module.sensor_service.source_name != "simulated":
+        return jsonify({"error": "Replay is only available when the sensor is simulated."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        roast_id = int(payload.get("roast_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "roast_id must be a whole number."}), 400
+
+    roast = get_roast_session(roast_id)
+    if roast is None:
+        abort(404)
+
+    times = roast_math.roast_times(roast)
+    points = times["points"]
+    if len(points) < 2:
+        return jsonify({"error": "That roast has too few samples to replay."}), 400
+    start = points[0][0]
+    curve = [((when - start).total_seconds(), temperature) for when, temperature, _ in points]
+
+    try:
+        status = sockets_module.sensor_service.set_replay(
+            curve, roast_id=roast_id, label=roast.get("bean_name") or f"Roast #{roast_id}"
+        )
+    except (RuntimeError, ValueError) as error:
+        return jsonify({"error": str(error)}), 400
+
+    current_app.logger.info("Started sensor replay", extra={"roast_id": roast_id, "samples": len(curve)})
+    return jsonify({"replay": status})
+
+
+@main.route("/api/sensor/replay", methods=["DELETE"])
+def stop_sensor_replay():
+    if sockets_module.sensor_service is None:
+        return jsonify({"error": "Sensor service is not ready yet."}), 503
+    sockets_module.sensor_service.clear_replay()
+    current_app.logger.info("Stopped sensor replay")
+    return jsonify({"replay": None})

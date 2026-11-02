@@ -267,6 +267,8 @@ def roast_report_row(roast, auc_base_c=150.0):
         "roast_level": roast.get("roast_level"),
         "batch_label": roast.get("batch_label") or "",
         "roast_color": roast.get("roast_color") or "",
+        "flavor_tags": list(roast.get("flavor_tags") or []),
+        "defect_flags": list(roast.get("defect_flags") or []),
         "created_at": roast.get("created_at"),
         "started_at": roast.get("started_at"),
         "rating": roast.get("rating"),

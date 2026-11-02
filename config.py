@@ -35,6 +35,12 @@ class Config:
     # SENSOR_FAULT_FLAME_AFTER consecutive faulty reads.
     SENSOR_FAULT_FLAME_POLICY = os.environ.get("SENSOR_FAULT_FLAME_POLICY", "hold").lower()
     SENSOR_FAULT_FLAME_AFTER = int(os.environ.get("SENSOR_FAULT_FLAME_AFTER", "5"))
+    # Cut the flame to 0% when no browser has been connected for this many
+    # seconds while the flame is above 0% (0 disables). Guards against a
+    # phone dying mid-roast with the burner up.
+    CLIENT_DISCONNECT_FLAME_TIMEOUT_SECONDS = float(
+        os.environ.get("CLIENT_DISCONNECT_FLAME_TIMEOUT_SECONDS", "0")
+    )
     SENSOR_LOG_EVERY_N = int(os.environ.get("SENSOR_LOG_EVERY_N", "10"))
     WIFI_SETUP_MODE = os.environ.get("WIFI_SETUP_MODE", "false").lower() == "true"
     WIFI_INTERFACE = os.environ.get("WIFI_INTERFACE", "wlan0")

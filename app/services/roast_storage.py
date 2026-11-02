@@ -6,7 +6,14 @@ from pathlib import Path
 from flask import current_app
 
 # Bump this when adding new columns or tables.
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
+
+# Tag lists added in v4, stored as JSON arrays of strings.
+ROAST_LIST_COLUMNS = (
+    ("flavor_tags", "TEXT NOT NULL DEFAULT '[]'"),
+    ("defect_flags", "TEXT NOT NULL DEFAULT '[]'"),
+)
+ROAST_LIST_FIELDS = tuple(column for column, _ in ROAST_LIST_COLUMNS)
 
 # Post-roast properties added in v3 (Artisan's Roast Properties dialog).
 # column -> SQL definition. Text columns default to '' so rows never carry NULL text.
@@ -72,6 +79,10 @@ def _apply_migrations(connection, from_version):
         _migrate_v3(connection)
         _record_version(connection, 3)
 
+    if from_version < 4:
+        _migrate_v4(connection)
+        _record_version(connection, 4)
+
 
 def _migrate_v1(connection):
     """Create roast_sessions table and backfill columns added before versioning."""
@@ -130,6 +141,14 @@ def _migrate_v3(connection):
             connection.execute(f"ALTER TABLE roast_sessions ADD COLUMN {column} {definition}")
 
 
+def _migrate_v4(connection):
+    """Add flavour-tag and defect-flag JSON list columns."""
+    existing = {row[1] for row in connection.execute("PRAGMA table_info(roast_sessions)")}
+    for column, definition in ROAST_LIST_COLUMNS:
+        if column not in existing:
+            connection.execute(f"ALTER TABLE roast_sessions ADD COLUMN {column} {definition}")
+
+
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
@@ -152,7 +171,7 @@ _BASE_COLUMNS = (
     "events_json",
     "photo_filename",
 )
-_INSERT_COLUMNS = _BASE_COLUMNS + ROAST_PROPERTY_FIELDS
+_INSERT_COLUMNS = _BASE_COLUMNS + ROAST_PROPERTY_FIELDS + ROAST_LIST_FIELDS
 _INSERT_ROAST_SQL = (
     f"INSERT INTO roast_sessions ({', '.join(_INSERT_COLUMNS)}) "
     f"VALUES ({', '.join('?' for _ in _INSERT_COLUMNS)})"
@@ -173,7 +192,7 @@ _LIST_COLUMNS = (
     "ended_at",
     "created_at",
     "photo_filename",
-) + ROAST_PROPERTY_FIELDS
+) + ROAST_PROPERTY_FIELDS + ROAST_LIST_FIELDS
 _DETAIL_COLUMNS = _LIST_COLUMNS + ("curve_json", "events_json", "photo_data")
 
 
@@ -217,7 +236,30 @@ def _roast_row(payload):
         json.dumps(events),
         payload.get("photo_filename", "") or "",
         *_property_values(payload),
+        *_list_values(payload),
     )
+
+
+def _list_values(payload):
+    """JSON-encoded values for ROAST_LIST_FIELDS in order (never NULL)."""
+    return [json.dumps(_clean_tag_list(payload.get(column))) for column in ROAST_LIST_FIELDS]
+
+
+def _clean_tag_list(value):
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return []
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str) and item.strip()]
+
+
+def _decode_list_fields(roast):
+    for column in ROAST_LIST_FIELDS:
+        roast[column] = _clean_tag_list(roast.get(column))
+    return roast
 
 
 def _property_values(payload):
@@ -268,6 +310,7 @@ def get_roast_session(roast_id):
 
     roast = dict(row)
     roast["weight_loss_percent"] = _weight_loss_percent(roast.get("weight_grams"), roast.get("roasted_weight_grams"))
+    _decode_list_fields(roast)
     roast["flame_level"] = _normalize_flame_level(roast.get("flame_level"))
     roast["curve"] = json.loads(roast.pop("curve_json") or "[]")
     roast["events"] = json.loads(roast.pop("events_json") or "[]")
@@ -330,6 +373,9 @@ def update_roast_session(roast_id, payload):
         if definition.startswith("TEXT"):
             value = "" if value is None else str(value).strip()
         assignments.append((column, value))
+    for column in ROAST_LIST_FIELDS:
+        if column in payload:
+            assignments.append((column, json.dumps(_clean_tag_list(payload.get(column)))))
 
     set_clause = ", ".join(f"{column} = ?" for column, _ in assignments)
     row = tuple(value for _, value in assignments) + (roast_id,)
@@ -378,6 +424,7 @@ def _format_list_row(row):
     photo_filename = result.get("photo_filename", "") or ""
     result["photo_url"] = f"/uploads/{photo_filename}" if photo_filename else ""
     result["weight_loss_percent"] = _weight_loss_percent(result.get("weight_grams"), result.get("roasted_weight_grams"))
+    _decode_list_fields(result)
     return result
 
 
