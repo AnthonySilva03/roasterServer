@@ -814,15 +814,55 @@ def export_roast(roast_id):
         current_app.logger.warning("Requested export for missing roast", extra={"roast_id": roast_id})
         abort(404)
 
-    data = {field: roast.get(field) for field in _EXPORT_FIELDS}
-    photo_data = _photo_as_data_url(roast)
-    if photo_data:
-        data["photo_data"] = photo_data
-
+    data = _export_entry(roast, include_photo=True)
     response = jsonify({"format": _EXPORT_FORMAT, "version": 1, "roast": data})
     response.headers["Content-Disposition"] = f'attachment; filename="{_export_filename(roast)}"'
-    current_app.logger.info("Exported roast session", extra={"roast_id": roast_id, "has_photo": bool(photo_data)})
+    current_app.logger.info("Exported roast session", extra={"roast_id": roast_id, "has_photo": "photo_data" in data})
     return response
+
+
+_BULK_EXPORT_FORMAT = "roaster-server-roasts"
+
+
+@main.route("/api/roasts/export", methods=["GET"])
+def export_all_roasts():
+    """Download every saved roast as one portable document (a full backup).
+
+    Roasts are listed oldest first so a re-import preserves their order.
+    Photos are embedded as base64 by default; pass ?photos=0 to leave them
+    out, which keeps a large library small enough to re-import in a single
+    request under MAX_CONTENT_LENGTH.
+    """
+    include_photos = request.args.get("photos", "1").strip().lower() not in ("0", "false", "no")
+
+    roasts = []
+    for summary in sorted(list_roast_sessions(limit=None), key=lambda row: row["id"]):
+        roast = get_roast_session(summary["id"])
+        if roast is not None:
+            roasts.append(_export_entry(roast, include_photo=include_photos))
+
+    response = jsonify(
+        {
+            "format": _BULK_EXPORT_FORMAT,
+            "version": 1,
+            "exported_at": _utc_now_iso(),
+            "count": len(roasts),
+            "roasts": roasts,
+        }
+    )
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M")
+    response.headers["Content-Disposition"] = f'attachment; filename="roaster-backup-{stamp}.json"'
+    current_app.logger.info("Exported all roast sessions", extra={"count": len(roasts), "photos": include_photos})
+    return response
+
+
+def _export_entry(roast, include_photo=True):
+    data = {field: roast.get(field) for field in _EXPORT_FIELDS}
+    if include_photo:
+        photo_data = _photo_as_data_url(roast)
+        if photo_data:
+            data["photo_data"] = photo_data
+    return data
 
 
 @main.route("/api/roasts/import", methods=["POST"])

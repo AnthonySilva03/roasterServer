@@ -21,8 +21,10 @@ install-dev:
 	$(PIP) install -r requirements-dev.txt
 
 # A throwaway SECRET_KEY is generated when none is set; the app refuses placeholder keys.
+# On macOS eventlet's kqueue hub crashes under Python 3.9, so default to the select hub there.
+EVENTLET_HUB_DEFAULT := $(if $(filter Darwin,$(shell uname -s)),selects,)
 run:
-	SECRET_KEY="$${SECRET_KEY:-$$($(PYTHON) -c 'import secrets; print(secrets.token_hex(32))')}" $(PYTHON) run.py
+	$(if $(EVENTLET_HUB_DEFAULT),EVENTLET_HUB="$${EVENTLET_HUB:-$(EVENTLET_HUB_DEFAULT)}") SECRET_KEY="$${SECRET_KEY:-$$($(PYTHON) -c 'import secrets; print(secrets.token_hex(32))')}" $(PYTHON) run.py
 
 test:
 	$(PYTHON) -m pytest

@@ -22,14 +22,17 @@ PYTHONPATH=. pytest # if pytest cannot find app
 app/__init__.py              Flask factory, config load, DB init, schema migration
 app/web/routes.py            All HTTP routes and JSON API endpoints
 app/sockets.py               Socket.IO events, sensor broadcast loop, flame control
-app/services/sensor_service.py   SensorService: pigpio or simulated, servo, health
+app/services/sensor_service.py   SensorService: pigpio or simulated, servo, health, bus lock
 app/services/roast_storage.py    SQLite persistence, schema versioning, photo file storage
+app/services/calibration.py      Servo pulse-width calibration persisted to instance/calibration.json
+app/services/wifi_service.py     nmcli wrapper for the /setup/wifi provisioning page
 
 app/templates/dashboard.html     Monthly calendar + Leaflet origin map + hardware health
 app/templates/roast_session.html Active roast, live graph, stage buttons, flame slider
 app/templates/roast_review.html  Save/cancel step with graph preview + photo upload
 app/templates/lookup.html        Saved roast browser with Leaflet origin filter map
 app/templates/lookup_edit.html   Post-roast metadata editor
+app/templates/settings.html      Hardware check + flame (servo) calibration slider
 
 app/static/js/origin_map.js  Shared Leaflet map + coffee-region alias matching
 app/static/js/dashboard.js   Dashboard calendar, origin map markers, health panel
@@ -39,6 +42,9 @@ app/static/js/roast_review.js   Pending roast review and save/cancel logic
 app/static/js/roast_alarms.js   User alarms: localStorage store, pure evaluator, beep/speech
 app/static/js/roast_assist.js   RoR flame assist: settings + pure step controller
 app/static/js/reports.js        Ranking report table (sortable, CSV download)
+app/static/js/settings.js       Settings page: health panel, calibration POST, roast settings
+app/static/js/live_charts.js    Shared: Chart.js setup, RoR/phases/AUC, overlays, analytics, escapeHtml, hasSensorTemperature
+app/static/sw.js                Service worker (precache + runtime caching); bump CACHE_VERSION on asset changes
 app/services/roast_math.py      Server-side roast math: timestamps, event roles, phases, AUC, key temps, report rows
 app/templates/reports.html      Ranking report page
 
@@ -47,12 +53,16 @@ tests/test_app.py            Integration tests: routes, roast API, photo handlin
 tests/test_sensor_service.py Unit tests: sensor modes, servo, health
 tests/test_sockets.py        Unit tests: sensor loop tick resilience
 tests/test_frontend_js.py    node --check every static JS file + runs tests/js/*.test.js (skips without node)
-tests/js/live_charts.test.js Node unit tests for RoR, phases, projections, alarms
+tests/js/live_charts.test.js Node unit tests for RoR, phases, AUC, projections, alarms, assist
+tests/test_roast_features.py Roast properties, CSV/Artisan exports, ranking report, v3 migration
+tests/test_roast_math.py     Server-side roast math
+tests/test_request_limits.py Request body cap (MAX_CONTENT_LENGTH) returns JSON 413
+tests/test_bulk_export.py    GET /api/roasts/export backup document + import round trip
 ```
 
 ## Architecture in One Paragraph
 
-HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets.py) runs a background loop (`_sensor_loop` → `_sensor_tick` per iteration) that emits `sensor_data` events to connected browsers; a failing hardware read is logged and skipped so the loop never dies. `SensorService` is the single hardware abstraction — it either reads a MAX6675 via pigpio or generates a simulated roast curve. `roast_storage.py` owns all SQLite work without an ORM. The frontend captures sensor events in `sessionStorage` during an active roast, then posts them to `POST /api/roasts` on the review page.
+HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets.py) runs a background loop (`_sensor_loop` → `_sensor_tick` per iteration) that emits `sensor_data` events to connected browsers; a failing hardware read is logged and skipped so the loop never dies. `SensorService` is the single hardware abstraction — it either reads a MAX6675 via pigpio or generates a simulated roast curve. `roast_storage.py` owns all SQLite work without an ORM. The frontend keeps the full roast curve in memory during an active roast, mirrors it to `localStorage` as a resumable draft, hands the finished roast to the review page through `localStorage`, and the review page POSTs it to `/api/roasts`.
 
 ## Critical Patterns
 
@@ -62,7 +72,7 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **Origin maps** — Both the dashboard and lookup page use Leaflet (`origin_map.js`). `renderOriginMarkers(containerEl, origins, selectedKey, onSelect)` mounts a Leaflet map into `containerEl` on first call (module-level singleton per page load). Marker clicks fire `onSelect(key)`. Adding new coffee regions means extending `coffeeOriginCatalog` in `origin_map.js`.
 
-**Roast save flow** — Active session page stores a pending roast object in `sessionStorage`. Review page reads it, shows a preview chart, and POSTs to `/api/roasts` on confirm. If the tab is closed before saving, the pending roast is lost (known limitation).
+**Roast save flow** — The active session keeps the whole curve in memory (no point cap) and writes an in-progress draft to `localStorage` (`roastDraft`) on every sample; reopening `/roast/session` offers to resume it. `Finish` writes the payload to `localStorage` (`pendingRoastReview`) and opens the review page, which shows a preview chart and POSTs to `/api/roasts` on confirm, then clears the key. Both survive a tab close or crash.
 
 **Simulated badge** — The server sets `simulated: bool` on `sensor_state` Socket.IO events. The dashboard and roast session pages show a gold `#simulatedBadge` pill when `state.simulated` is true.
 
@@ -74,7 +84,7 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 
 **HTML escaping** — Any data rendered through an innerHTML template literal (bean name, origin, roast level, notes, event label/detail, counts, and date formatters that echo unparseable input) goes through `escapeHtml()` from `live_charts.js`, including attribute values. Single values use `textContent`. Never interpolate raw data into innerHTML; imported JSON is untrusted.
 
-**Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before touching disk or DB, then writes all photos and inserts all rows in one transaction (`save_roast_sessions`); any failure removes the written photos and imports nothing. Incoming `id`s are dropped and fresh ones assigned. `create_roast` and `import_roasts` share `_normalize_roast_payload`, which also type-checks `curve` (list of `{timestamp: str, temperature: finite number}`), `events` (list of objects with a non-empty `label`), `notes`/`taste_notes` (text or null), and `rating` (1–5 or null), coercing numeric strings in place so a bad record is a 400, never a 500.
+**Roast export/import** — `GET /api/roasts/<id>/export` returns a portable `{format, version, roast}` document (Content-Disposition attachment) with photos embedded as a base64 `photo_data` URL; `GET /api/roasts/export` returns every roast, oldest first, as `{format: "roaster-server-roasts", version, exported_at, count, roasts}` (`?photos=0` omits photos so a big library re-imports under `MAX_CONTENT_LENGTH`). `scripts/backup_roasts.sh <base-url>` saves that document to `backups/`. `POST /api/roasts/import` accepts a single export doc, a bare roast object, or a list/`{items|roasts}`; it validates **every** entry via `_normalize_roast_payload` before touching disk or DB, then writes all photos and inserts all rows in one transaction (`save_roast_sessions`); any failure removes the written photos and imports nothing. Incoming `id`s are dropped and fresh ones assigned. `create_roast` and `import_roasts` share `_normalize_roast_payload`, which also type-checks `curve` (list of `{timestamp: str, temperature: finite number}`), `events` (list of objects with a non-empty `label`), `notes`/`taste_notes` (text or null), and `rating` (1–5 or null), coercing numeric strings in place so a bad record is a 400, never a 500.
 
 **Rate-of-rise & turn point** — Client-side only, in `live_charts.js`. `buildRorSeries(curve, {windowSeconds, smoothingPoints})` fits a least-squares slope over the trailing window (no points until half a window of history exists) and then applies a trailing moving average; defaults come from `getRoastSettings()`. `enableRorOverlay(chart)` adds a dataset tagged `roasterRole: "ror"` on the right-hand `y1` axis (temperature stays dataset 0 so `stageMarkerPlugin` is unaffected; every overlay is found by role via `findDataset`, never by index). `detectTurningPoint(curve, {startedAt, riseThreshold})` returns the confirmed post-charge minimum, drawn as a stage marker by `rebuildStageMarkers` in `roast_session.js`. No server storage — these are derived from the saved curve. Sensor timestamps are `HH:MM:SS.mmm` (`_sample_timestamp()` in `sensor_service.py`); `parseRoastTimestamp` accepts both with and without the millisecond suffix.
 
@@ -113,6 +123,7 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 | Variable | Default | Notes |
 |---|---|---|
 | `SECRET_KEY` | `devkey` | Must be overridden in production |
+| `MAX_CONTENT_LENGTH` | `33554432` (32 MB) | Largest request body; larger gets a JSON 413 |
 | `SENSOR_MODE` | `simulated` | Set to `pigpio` on Pi hardware |
 | `DATABASE_URL` | `sqlite:///roasts.db` | SQLite path, resolved relative to `instance/` |
 | `SENSOR_INTERVAL_SECONDS` | `2` | Sensor broadcast rate |
@@ -120,6 +131,8 @@ HTTP routes (routes.py) render pages and expose the REST API. Socket.IO (sockets
 | `MAX6675_CLK_PIN` | `11` | GPIO clock |
 | `MAX6675_DO_PIN` | `9` | GPIO data-out |
 | `SERVO_CONTROL_PIN` | `18` | GPIO for flame servo |
+| `SERVO_MIN_PULSEWIDTH` / `SERVO_MAX_PULSEWIDTH` | `1000` / `2000` | µs range for 0–100 % flame; overridden by saved calibration |
+| `CAPTIVE_PORTAL_ENABLED` | `false` | Redirect captive-portal probe URLs to the dashboard (direct-AP mode) |
 | `WIFI_SETUP_MODE` | `false` | Enables `/setup/wifi` provisioning page |
 | `MAX_BEAN_TEMP_C` | `250` | Flame cut to 0% at this bean temp; `0` disables |
 | `SENSOR_FAULT_FLAME_POLICY` | `hold` | `min` cuts the flame after repeated thermocouple faults |
@@ -136,6 +149,7 @@ DELETE /api/roasts/<id>         remove roast + photo file
 GET  /api/roasts/<id>/export    download a single roast as portable JSON
 GET  /api/roasts/<id>/export.csv   curve + events as CSV
 GET  /api/roasts/<id>/export.alog  Artisan profile (dict literal) for File › Open in Artisan
+GET  /api/roasts/export         download every roast as one backup document (?photos=0 to omit photos)
 GET  /api/roasts/report         per-roast statistics for the ranking report (?auc_base=150)
 POST /api/roasts/import         restore one or many roasts from exported JSON
 GET  /api/sensor/health         hardware health check (incl. servo pulse-width range)
@@ -149,7 +163,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-All tests use an in-memory SQLite DB and disable the background sensor task. 112 tests currently pass. Extend `test_app.py` for new routes or storage behavior, `test_roast_features.py` for properties/exports/report, `test_roast_math.py` for the server-side math, `test_sockets.py` for the sensor loop and safety cutoffs, and `test_sensor_service.py` for hardware mode changes. Frontend roast math lives in `tests/js/*.test.js` (node's built-in runner, invoked by `tests/test_frontend_js.py`); `live_charts.js`, `roast_alarms.js` and `roast_assist.js` export their pure helpers via a `module.exports` guard for this.
+Each test gets a fresh temporary instance folder and SQLite file (`tests/conftest.py`), with the background sensor task disabled. 120 tests currently pass. Extend `test_app.py` for new routes or storage behavior, `test_roast_features.py` for properties/exports/report, `test_roast_math.py` for the server-side math, `test_sockets.py` for the sensor loop and safety cutoffs, and `test_sensor_service.py` for hardware mode changes. Frontend roast math lives in `tests/js/*.test.js` (node's built-in runner, invoked by `tests/test_frontend_js.py`); `live_charts.js`, `roast_alarms.js` and `roast_assist.js` export their pure helpers via a `module.exports` guard for this.
 
 ## Common Gotchas
 
@@ -157,3 +171,7 @@ All tests use an in-memory SQLite DB and disable the background sensor task. 112
 - The `_originMap` singleton in `origin_map.js` is per-page-load. Calling `renderOriginMarkers` with a different container on the same page will silently reuse the first container.
 - `wifi_service` only exposes the provisioning routes while `WIFI_SETUP_MODE=true`. The dashboard redirects to `/setup/wifi` when that flag is set.
 - `make check` runs `python -m compileall` first — catch syntax errors before pytest.
+- Static files (JS, CSS, `sw.js`) are served from disk, so a deploy that only touches them needs no service restart but does need a `CACHE_VERSION` bump. Python changes need `systemctl restart roaster-server.service`.
+- The Pi cannot reach GitHub. Deploy by pushing from a workstation to a temp ref and fast-forwarding on the Pi (`docs/pi-setup.md` → Deploying Updates).
+- On macOS with the Python 3.9 venv, eventlet's kqueue hub crashes on the first accepted request. `make run` / `dev.sh run` set `EVENTLET_HUB=selects` on Darwin; set it yourself if you run `run.py` directly.
+- In `pigpio` mode a failed thermocouple read is a fault sample (`temperature: null`), never a simulated value. Only a missing pigpio daemon switches the whole source to `simulated`.

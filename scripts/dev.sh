@@ -25,6 +25,14 @@ if [[ $# -lt 1 ]]; then
     exit 1
 fi
 
+# Anything that builds the app needs a real SECRET_KEY (placeholders are refused);
+# give local commands a throwaway one when none is exported. On macOS eventlet's
+# kqueue hub crashes under Python 3.9, so default to the select hub there.
+app_env() {
+    export SECRET_KEY="${SECRET_KEY:-$("$PYTHON" -c 'import secrets; print(secrets.token_hex(32))')}"
+    if [[ "$(uname -s)" == "Darwin" ]]; then export EVENTLET_HUB="${EVENTLET_HUB:-selects}"; fi
+}
+
 case "$1" in
     install)
         "$PIP" install -r requirements.txt
@@ -33,10 +41,11 @@ case "$1" in
         "$PIP" install -r requirements-dev.txt
         ;;
     run)
-        # Throwaway SECRET_KEY when none is set; the app refuses placeholder keys.
-        SECRET_KEY="${SECRET_KEY:-$("$PYTHON" -c 'import secrets; print(secrets.token_hex(32))')}" "$PYTHON" run.py
+        app_env
+        "$PYTHON" run.py
         ;;
     seed-roasts)
+        app_env
         PYTHONPATH=. "$PYTHON" scripts/seed_test_roasts.py
         ;;
     test)

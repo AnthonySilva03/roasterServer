@@ -54,19 +54,27 @@ Creates the Flask app, loads configuration, registers the HTTP blueprint, starts
 
 ### `app/web/routes.py`
 
-Owns browser-facing routes and JSON API endpoints, including the sensor health endpoint.
+Owns browser-facing routes (dashboard, roast setup/session/review, lookup, lookup edit, settings, Wi-Fi setup, captive-portal probes, `/sw.js`, `/uploads/<file>`) and the JSON API: roast CRUD with strict payload validation, export/import (all-or-nothing), sensor health, and servo calibration.
 
 ### `app/sockets.py`
 
-Owns Socket.IO events, client connection behavior, background sensor broadcasting, and control commands such as `start`, `stop`, `reset`, and `set_flame_level`.
+Owns Socket.IO events, client connection behavior, background sensor broadcasting, and control commands such as `start`, `stop`, `reset`, and `set_flame_level`. The loop runs `_sensor_tick()` once per interval; a read that raises is logged and skipped, and a hardware fault sample (`temperature: null` + `error`) is broadcast so clients show the fault instead of a stale value.
 
 ### `app/services/sensor_service.py`
 
-Provides a single `SensorService` abstraction that either reads real hardware data through `pigpio` or produces simulated roast telemetry for development. In hardware mode it also controls the roast-flame servo and reports sensor health.
+Provides a single `SensorService` abstraction that either reads real hardware data through `pigpio` or produces simulated roast telemetry for development. In hardware mode it also controls the roast-flame servo and reports sensor health. A failed thermocouple read is reported as a fault, never replaced with simulated data. All bit-banged MAX6675 reads hold a lock, and `health_status()` reports the loop's most recent read instead of touching the bus while the loop is sampling.
+
+### `app/services/calibration.py`
+
+Persists the servo pulse-width endpoints set on the settings page to `instance/calibration.json`; `sockets.py` applies them over the env defaults when the sensor service starts.
+
+### `app/services/wifi_service.py`
+
+Wraps `nmcli` for the `/setup/wifi` provisioning page (scan, connect, drop the setup hotspot). Only active while `WIFI_SETUP_MODE=true`.
 
 ### `app/services/roast_storage.py`
 
-Handles SQLite setup and roast-session persistence without requiring a full ORM. Uses a `schema_version` table to track additive column migrations. Photos are stored on disk at `instance/uploads/<uuid>.<ext>`; the DB stores `photo_filename`. Legacy records retain `photo_data` (base64).
+Handles SQLite setup and roast-session persistence without requiring a full ORM. Uses a `schema_version` table to track additive column migrations. `save_roast_sessions()` inserts any number of roasts in one transaction (import relies on this); `save_roast_session()` is the single-row wrapper. Photos are stored on disk at `instance/uploads/<uuid>.<ext>`; the DB stores `photo_filename`. Legacy records retain `photo_data` (base64).
 
 ## Data Flow
 
@@ -77,10 +85,10 @@ Roast Setup
    |
    v
 Active Roast Session
-   |  Socket.IO sensor_data
+   |  Socket.IO sensor_data (full curve kept; draft mirrored to localStorage)
    |  Socket.IO set_flame_level
    v
-Roast Review
+Roast Review   (payload handed over via localStorage)
    |  POST /api/roasts
    v
 SQLite
@@ -93,10 +101,10 @@ Browser
 GET /api/sensor/health
    |
    v
-sensor_service.health_status()
+sensor_service.health_status()  (last loop read; direct read only if stale)
    |
    v
-dashboard / roast widget
+dashboard / roast widget / settings page
 ```
 
 1. `run.py` starts the application.
@@ -105,7 +113,7 @@ dashboard / roast widget
 4. The sensor loop emits `sensor_data` to all connected clients.
 5. The browser updates charts, metrics, and hardware-health status from those events and the health endpoint.
 6. During roasting, the browser can send `set_flame_level` control events over Socket.IO to update the flame controller.
-7. When a user saves a roast, the browser posts the current captured curve to `POST /api/roasts`.
+7. When a user saves a roast, the browser posts the full captured curve to `POST /api/roasts`, which validates every field before storage.
 8. SQLite stores the roast session in `instance/roasts.db`.
 
 ## Why This Structure
@@ -139,21 +147,32 @@ app/web/routes.py
   -> serve uploaded photos (/uploads/<filename>)
 
 app/sockets.py
-  -> live stream
+  -> live stream (one _sensor_tick per interval; never dies on a bad read)
+  -> fault samples broadcast
   -> roast controls
-  -> flame_level updates
+  -> flame_level updates + saved calibration applied at start
   -> simulated flag on sensor_state events
 
 app/services/sensor_service.py
-  -> MAX6675 reading
-  -> servo pulse control
-  -> hardware health
+  -> MAX6675 reading (bus lock)
+  -> servo pulse control + calibration
+  -> hardware health (cached last read)
+
+app/services/calibration.py
+  -> load/save servo pulse-width range (instance/calibration.json)
 
 app/services/roast_storage.py
   -> save/load/update/delete roast sessions
+  -> multi-row save in one transaction
   -> schema versioning (schema_version table)
-  -> photo file cleanup on delete
   -> summary queries
+
+app/static/js/live_charts.js
+  -> Chart.js setup, stage markers, RoR + turn point, analytics
+  -> shared helpers: escapeHtml, hasSensorTemperature
+
+app/static/sw.js
+  -> PWA precache + runtime caching (bump CACHE_VERSION on asset changes)
 
 app/static/js/origin_map.js
   -> Leaflet map init (singleton)

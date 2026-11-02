@@ -1,169 +1,234 @@
 # Continuation Notes
 
-Last updated: 2026-06-01
+Last updated: 2026-11-02
 
 ## Purpose
 
-This document is a restart point for future development sessions. It summarizes what already exists, what is important not to forget, and where the most likely next changes should happen.
+Restart point for future development sessions: what exists, what matters, and
+where the next changes most likely go. Read `CLAUDE.md` first for the patterns
+and gotchas; this file carries the narrative, the deployment state, and the
+backlog.
+
+## Where Things Stand
+
+- **Deployed.** The roaster Pi runs `master` as `roaster-server.service` in
+  `pigpio` mode behind its own `Roaster` access point (hostapd + dnsmasq at
+  `10.42.0.1`), with Ethernet for admin access. It has no GitHub credentials;
+  deploy by pushing from a workstation (`docs/pi-setup.md` → Deploying Updates).
+  Python changes need a service restart; static-file changes need a
+  `CACHE_VERSION` bump in `sw.js` instead.
+- **Tests.** 80 pass via `make check`. There is no committed JS test harness;
+  frontend changes are checked with `node --check` plus ad-hoc stubbed-DOM
+  harnesses (plain Node `vm`, no dependencies) during development.
+- **Sudo on the Pi.** `deploy/sudoers-roaster-server` grants `pi` passwordless
+  `nmcli` and `systemctl restart roaster-server.service`. Check whether it is
+  installed with `sudo -n -l` on the Pi; if the restart rule is missing, run
+  step 4 of `docs/pi-setup.md`.
+- **No saved roasts yet on the Pi** as of this date, so the 2026-11 changes
+  below are verified by tests and harnesses, not by a real roast.
+
+### Changes landed 2026-11-01 → 2026-11-02 (all on `master`, all deployed)
+
+1. Pulled three commits that existed only on the Pi: settings page with
+   hardware check, servo flame calibration (persisted), PWA install banner.
+2. Saved roast curves are no longer truncated to the last 30 samples
+   (`MAX_CHART_POINTS` removed; the chart never needed a rolling window).
+3. `SECRET_KEY` guard actually fires (default is `devkey`, placeholders
+   rejected); `make run` / `dev.sh run` generate a throwaway dev key.
+4. Sensor loop survives read exceptions (`_sensor_tick`), and a thermocouple
+   fault is broadcast as `temperature: null` + `error` instead of a fabricated
+   simulated value. Pages show `-- °C`; the session logs Hardware Issue /
+   Sensor Recovered events and leaves a gap in the curve.
+5. Health check no longer bit-bangs the MAX6675 while the loop is sampling
+   (reports the loop's last read; all reads hold `_bus_lock`).
+6. API hardening: strict `_normalize_roast_payload` (curve/events/notes/rating
+   types, numeric-string coercion), atomic import (photos first, one DB
+   transaction, cleanup on failure), `?limit` validation.
+7. Every innerHTML template escapes data via `escapeHtml()`.
+8. Sudoers rules shipped in `deploy/` and installed by
+   `scripts/install_pi_service.sh`; docs gained a Deploying Updates section.
+9. Docs refreshed; `make run` sets `EVENTLET_HUB=selects` on macOS.
+10. `MAX_CONTENT_LENGTH` (32 MB default) with a JSON 413 handler.
+11. Full backup: `GET /api/roasts/export` (all roasts, oldest first, `?photos=0`)
+    and `scripts/backup_roasts.sh <base-url>` saving to git-ignored `backups/`.
 
 ## Current Priorities
 
-1. Improve the active roast workflow with richer roast analytics.
-   - Implemented: roast duration, development time, development ratio, peak temperature, batch weight, saved total roast time, flame-level tracking, rate-of-rise display (RoR overlay + stat), turn-point detection (marked on the live curve).
-   - Good follow-up candidates: stronger graph annotations, comparative batch overlays, RoR on saved-roast (review/lookup) charts.
-
-2. Improve persistence for media and roast records.
-   - Implemented: photos now stored on disk at `instance/uploads/<uuid>.<ext>` instead of base64 in SQLite. `schema_version` table drives additive migrations. Roast export (`GET /api/roasts/<id>/export`) and import (`POST /api/roasts/import`) round-trip a portable JSON document including embedded photos.
-   - Still open: richer tasting-history tracking, batch export of all roasts, import UI on the lookup page (export link exists; import currently endpoint-only).
-
-3. Improve Raspberry Pi hardware polish.
-   - Servo calibration UI, clearer diagnostics, better recovery from hardware faults are the main remaining gaps.
+1. **Validate on a real roast.** Next time the roaster runs: confirm the saved
+   `sample_count` is about `total_roast_seconds / 2`; unplug the thermocouple
+   for a few seconds and confirm `-- °C`, a Hardware Issue event, a Sensor
+   Recovered event, and a gap in the curve; confirm the turn-point marker.
+2. **Roast analytics on saved charts.** RoR overlay and turn point are live-only
+   (`live_charts.js`); the review and lookup charts could reuse them.
+   Comparative batch overlays remain open.
+3. **Persistence / UI gaps.** Import is endpoint-only (no UI on the lookup
+   page); richer tasting history. Full backup exists:
+   `GET /api/roasts/export` + `scripts/backup_roasts.sh`.
+4. **Hardware polish.** Clearer diagnostics on the settings page, multi-sensor
+   support. Servo calibration itself is done.
+5. **Dev ergonomics.** The Artisan branch (PR #1, `worktree-artisan-features`)
+   adds a Node test harness (`tests/js/*.test.js` + `tests/test_frontend_js.py`,
+   skipped without node). Once it merges, port this session's ad-hoc checks
+   into it: full curve retained (no truncation), fault sample handling
+   (`-- °C`, gap, Hardware Issue / Sensor Recovered events), innerHTML
+   escaping. Rebase hotspots for that PR against master: `CLAUDE.md` and the
+   restructured `read_sample()` in `sensor_service.py`.
 
 ## Current Product State
 
 ```text
-Dashboard
+Dashboard (/)
   -> monthly roast calendar
-  -> interactive global roast origin map (Leaflet)
+  -> interactive global roast origin map (Leaflet, vendored tiles z0–4)
   -> clickable selected-origin roast list
-  -> hardware health panel
-  -> simulated-mode badge
+  -> hardware health panel, simulated-mode badge
+  -> live temperature (shows -- °C on a sensor fault)
 
-Roast setup
-  -> bean name
-  -> origin
-  -> roast level
-  -> batch weight
+Roast setup (/roast)
+  -> bean name, origin, roast level, batch weight
+  -> recent roast history
 
-Active roast session
-  -> live temperature graph
+Active roast session (/roast/session)
+  -> live temperature graph with RoR overlay and turn-point marker
   -> pre-roast / start / first crack / second crack / finish
-  -> servo flame control
-  -> hardware widget with issue logging
-  -> simulated-mode badge
+  -> servo flame slider (flame changes logged as events)
+  -> hardware widget, 10 s health poll, fault + recovery events
+  -> screen Wake Lock, notifications (turn point, RoR crash, hardware)
+  -> full curve kept; draft persisted to localStorage, resumable
 
-Roast review
-  -> summary before save
-  -> batch weight + total roast time
-  -> graph preview of the exact curve to be saved
+Roast review (/roast/review)
+  -> summary + analytics, graph preview of the exact curve to be saved
   -> optional photo upload (MIME + size validated)
-  -> save or cancel
+  -> save (POST /api/roasts) or cancel; payload survives tab close
 
-Lookup
-  -> saved roast list + text search
-  -> compact interactive global origin filter map (Leaflet)
-  -> temperature curve with event badges
-  -> edit roast button
-  -> remove roast button
-  -> cup rating and tasting notes display
-  -> saved photo (photo_url for new records, photo_data fallback for legacy)
+Lookup (/lookup)
+  -> saved roast list + text search, origin filter map
+  -> curve with event badges, analytics, rating, tasting notes, photo
+  -> edit / export / remove
 
-Post-roast edit
-  -> edit bean/origin/level/weight
-  -> edit roast notes
-  -> rating after tasting
-  -> taste notes after brewing/cupping
+Post-roast edit (/lookup/<id>/edit)
+  -> bean / origin / level / weight, roast notes, rating, taste notes
+
+Settings (/settings)
+  -> live hardware check (temperature, servo, mode, last error)
+  -> servo min/max pulse-width calibration, persisted to instance/calibration.json
+
+Wi-Fi setup (/setup/wifi, only while WIFI_SETUP_MODE=true)
+
+PWA: installable, offline app shell + saved-roast cache, vendored libs/tiles
 ```
 
 ## Important Technical Decisions
 
 - Temperature-only telemetry. Humidity and pressure were intentionally removed.
-- `SensorService` is the single hardware abstraction layer.
-- `pigpio` hardware mode supports MAX6675 temperature reads, servo pulse control for roast flame, and hardware health reporting.
-- Simulated mode is first-class. Development without Pi hardware must keep working.
-- Roast sessions are not written to the database immediately on `Finish`. The active roast page stores a pending roast in browser `sessionStorage`. The review page shows the exact graph curve that will be saved, then decides whether to save or cancel.
-- Cup feedback is intentionally separate from roast capture. Rating and tasting notes can only be added once the roast has been saved.
+- `SensorService` is the single hardware abstraction. Simulated mode is
+  first-class and must keep working without hardware, but it is never used to
+  paper over a faulting sensor: a failed read in `pigpio` mode is a fault sample.
+- All MAX6675 reads hold `_bus_lock`; `health_status()` reports the loop's
+  most recent read and only reads the chip directly when the loop is idle.
+- The sensor loop is one `_sensor_tick()` per interval and never dies on an
+  exception; failures are logged with throttling and recovery is logged.
+- Roasts are not written to the database during the roast. The session page
+  keeps the full curve in memory, mirrors a draft to `localStorage`, and hands
+  the finished payload to the review page through `localStorage`. The review
+  page shows exactly what will be saved, then POSTs.
+- `POST /api/roasts` and `POST /api/roasts/import` share
+  `_normalize_roast_payload`, which rejects malformed records with a 400.
+  Import is all-or-nothing: photos first, rows in one transaction
+  (`save_roast_sessions`), cleanup on any failure.
+- Cup feedback (rating, tasting notes) is only added after a roast is saved.
 - Delete is explicit and manual from lookup. No soft deletes.
-- Photo storage: new roasts write files to `instance/uploads/<uuid>.<ext>`. The DB stores `photo_filename`. The API returns `photo_url` for new records and `photo_data` (legacy base64 string) for old ones. The DELETE endpoint removes the file from disk.
-- Schema migration: `roast_storage.py` uses a `schema_version` table. Bump `_SCHEMA_VERSION` and add `_migrate_vN(conn)` when adding columns. Never alter the baseline `CREATE TABLE`.
-- Both the dashboard and lookup origin maps use Leaflet via `origin_map.js`. The module-level `_originMap` singleton is created on first call to `renderOriginMarkers`. Both pages must load `leaflet.js` before `origin_map.js`.
+- Photo storage: files under `instance/uploads/<uuid>.<ext>`, `photo_filename`
+  in the DB; legacy rows keep base64 `photo_data`. DELETE removes the file.
+- Schema migration: `schema_version` table; bump `_SCHEMA_VERSION` and add
+  `_migrate_vN(conn)`. Never alter the baseline `CREATE TABLE`.
+- `SECRET_KEY` must be a real value outside tests (`config.INSECURE_SECRET_KEYS`
+  lists the rejected placeholders).
+- User-entered text only reaches innerHTML through `escapeHtml()`.
+- Third-party libraries and map tiles are vendored; no CDN tags.
+- Direct-AP networking runs on hostapd + dnsmasq (NetworkManager's AP mode
+  fails on the Pi's brcmfmac chip). The systemd unit runs `run.py` directly.
 
 ## Key Files
 
 ### Server
 
-- `run.py` — app entry point, eventlet monkey patch + server start
-- `app/__init__.py` — Flask app factory, config load, route and socket registration, DB init
-- `app/web/routes.py` — HTML routes, JSON API routes, photo validation, sensor health endpoint
-- `app/sockets.py` — background sensor loop, Socket.IO control handling, flame-control events, simulated flag
-
-### Services
-
-- `app/services/sensor_service.py` — simulated mode, MAX6675 pigpio mode, servo flame control, health checks
-- `app/services/roast_storage.py` — SQLite setup, schema versioning, roast session persistence, photo file storage, roast updates and deletion
+- `run.py` — eventlet monkey patch + server start
+- `app/__init__.py` — app factory, config, `SECRET_KEY` guard, DB init
+- `app/web/routes.py` — pages, JSON API, payload validation, photo handling,
+  export/import, health, calibration, captive-portal probes, `/sw.js`
+- `app/sockets.py` — sensor loop (`_sensor_tick`), fault broadcast, controls
+- `app/services/sensor_service.py` — simulated + pigpio modes, servo, bus lock,
+  cached health
+- `app/services/calibration.py` — servo pulse-width persistence
+- `app/services/roast_storage.py` — SQLite, schema versioning,
+  `save_roast_sessions`
+- `app/services/wifi_service.py` — nmcli wrapper for provisioning
 
 ### Frontend
 
-- `app/templates/dashboard.html` — monthly roast calendar, Leaflet origin map, selected-origin roast list, hardware health widget
-- `app/templates/roast.html` — roast setup page
-- `app/templates/roast_session.html` — active roast UI, live graph, roast control buttons, hardware widget
-- `app/templates/roast_review.html` — save/cancel step, saved-curve preview, photo upload
-- `app/templates/lookup.html` — saved roast browser, Leaflet origin filter map, edit/remove actions, tasting feedback, photo
-- `app/templates/lookup_edit.html` — full post-roast editor
+- `app/templates/*.html` — one per page plus `base.html` (PWA metadata,
+  install banner, service-worker registration)
+- `app/static/js/live_charts.js` — Chart.js setup, stage markers, RoR, turn
+  point, analytics, `escapeHtml`, `hasSensorTemperature`
+- `app/static/js/roast_session.js` — most of the roast-flow logic
+- `app/static/js/roast_review.js`, `lookup_page.js`, `lookup_edit.js`,
+  `dashboard.js`, `roast_setup.js`, `settings.js`, `pwa_install.js`, `toast.js`
+- `app/static/js/origin_map.js` — Leaflet map singleton + origin alias catalog
+- `app/static/sw.js` — service worker; `manifest.webmanifest`; `icons/`
+- `app/static/vendor/` — Chart.js, Socket.IO, Leaflet (+ images), map tiles
 
-- `app/static/js/origin_map.js` — shared Leaflet map init, coffee-region alias matching, `renderOriginMarkers`
-- `app/static/js/dashboard.js` — dashboard calendar and health panel, origin map wiring
-- `app/static/js/roast_session.js` — most active frontend logic: roast stages, flame control, hardware polling, issue recording
-- `app/static/js/roast_review.js` — pending roast review and save/cancel logic, review chart preview
-- `app/static/js/lookup_page.js` — roast detail loading, origin map filtering (onSelect callback), event badges, edit/remove, photo display
-- `app/static/js/lookup_edit.js` — post-roast property loading and saving
+### Deployment
+
+- `deploy/roaster-server.service`, `deploy/roaster-server.env.example`
+- `deploy/sudoers-roaster-server`
+- `deploy/ap/` — hostapd, dnsmasq, NetworkManager drop-ins
+- `scripts/install_pi_service.sh`, `scripts/install_pi_ap.sh`,
+  `scripts/wifi_provisioning_bootstrap.sh`, `scripts/dev.sh`,
+  `scripts/seed_test_roasts.py`
+- `docs/pi-setup.md` — install, network modes, deploying updates
 
 ## Current Storage Shape
 
-The `roast_sessions` table stores:
+`roast_sessions` (schema version 2): bean_name, origin, roast_level, notes,
+taste_notes, rating, weight_grams, total_roast_seconds, flame_level,
+sample_count, started_at, ended_at, created_at, curve_json, events_json,
+photo_filename (new), photo_data (legacy).
 
-- roast metadata (bean_name, origin, roast_level, notes, taste_notes, rating)
-- `weight_grams`, `total_roast_seconds`, `flame_level`
-- `curve_json`, `events_json`
-- `photo_filename` (new) — path relative to `instance/uploads/`
-- `photo_data` (legacy) — base64 data URL for records created before the disk-storage migration
-
-Schema is managed through the `schema_version` table. Current version: 2.
+Also in `instance/`: `uploads/` (photos) and `calibration.json` (servo range).
 
 ## Current Hardware Behavior
 
 ```text
-SENSOR_MODE=simulated
-  -> simulated temperature curve
-  -> simulated health returns healthy
-  -> flame level tracked logically
-  -> sensor_state events carry simulated=True
+SENSOR_MODE=simulated (or pigpio daemon unreachable)
+  -> simulated temperature curve, source="simulated", simulated badge shown
+  -> health always healthy
 
 SENSOR_MODE=pigpio
-  -> MAX6675 read via pigpio bit-banging
-  -> servo pulsewidth updates from flame slider
-  -> /api/sensor/health checks temperature + servo path
+  -> MAX6675 read via pigpio bit-banging, under _bus_lock
+  -> open circuit -> sample {temperature: null, error: "Thermocouple open circuit"}
+  -> read exception -> tick skipped, logged (throttled), loop continues
+  -> servo pulse width from flame slider, range from env or saved calibration
+  -> /api/sensor/health reports the loop's last read (direct read only if stale)
 ```
 
 ## Known Constraints / Risks
 
-- Roast review persistence depends on browser `sessionStorage`. If the tab is closed unexpectedly before save, the pending roast is lost.
-- `_originMap` in `origin_map.js` is a module-level singleton per page load. Only one Leaflet map can exist per page. Both pages must load `leaflet.js` before `origin_map.js`.
-- Origin mapping is alias-based. New or unusual origin strings may need extra aliases in `coffeeOriginCatalog`.
-- Sensor polling and health checks are simple and synchronous. If hardware latency grows this could affect responsiveness.
-- The active roast page polls hardware health every 10 seconds. Not event-driven.
-
-## Suggested Next Development Options
-
-1. Improve roast data quality
-   - rate-of-rise calculations
-   - graph annotations beyond vertical markers
-   - comparative batch overlays
-
-2. Improve persistence
-   - export/import for roast sessions
-   - richer tasting-history tracking per roast
-
-3. Improve hardware integration
-   - explicit servo calibration UI
-   - multi-sensor support
-   - more detailed Pi diagnostics
-
-4. Improve frontend usability
-   - better mobile layout on roast session page
-   - toast notifications
-   - richer lookup filters/search
-   - map clustering or tooltips for dense origin regions
+- Curve timestamps are `HH:MM:SS` without a date; elapsed-time math would
+  misbehave for a roast that crosses midnight.
+- The roast draft is re-serialized to `localStorage` on every sample. Fine for
+  hours of roasting; unbounded in principle if a session is left running.
+- Health is polled every 10 s; not event-driven.
+- `_originMap` is a per-page singleton; origin mapping is alias-based and may
+  need new aliases in `coffeeOriginCatalog`.
+- The Pi's single Wi-Fi radio: enabling AP mode drops any Wi-Fi SSH session.
+  Use Ethernet for admin.
+- The Pi cannot reach GitHub; deploys are pushes from a workstation.
+- Local dev venv is Python 3.9 with eventlet 0.39 (maintenance mode); the Pi
+  runs Python 3.13. On macOS the kqueue hub crashes, hence `EVENTLET_HUB=selects`.
+- Request bodies are capped at `MAX_CONTENT_LENGTH` (32 MB default, JSON 413
+  above it); a multi-roast import with several 5 MB photos can hit it.
+- No committed JS tests on master yet (PR #1 brings the harness).
 
 ## Recommended Restart Checklist
 
@@ -174,54 +239,48 @@ make run
 
 Then verify:
 
-1. Dashboard loads with Leaflet origin map and hardware health panel.
-2. Roast setup opens `/roast/session`.
-3. Roast review opens after `Finish` and shows graph preview.
-4. Dashboard origin markers and rollup entries are clickable.
-5. Lookup displays saved roasts, the Leaflet origin filter map, and links to post-roast edit.
-6. Lookup origin map markers filter the roast list when clicked.
-7. Lookup edit saves roast property changes correctly.
-8. Lookup remove deletes the selected roast (and photo file if present) and refreshes the list.
-9. `/api/sensor/health` returns expected hardware status.
+1. Dashboard loads with the Leaflet origin map and hardware health panel.
+2. `/settings` shows live temperature and the calibration slider.
+3. Roast setup opens `/roast/session`; Pre Roast starts logging; Finish opens
+   the review with the full curve; Save lands in lookup with the right
+   `sample_count`.
+4. Lookup detail, edit, export, and remove work; import round-trips an export.
+5. `/api/sensor/health` returns the expected shape.
+6. On the Pi only: unplug the thermocouple briefly and confirm the fault UI.
 
 ## Test Coverage Snapshot
 
-Current automated coverage:
+- Pages render (incl. `/settings`); PWA manifest + service worker served.
+- Roast create/detail/summary; payload validation (14 malformed cases) and
+  coercion; `?limit` validation; patch/delete; photo type/size; export/import
+  round trip and atomicity (invalid entry, photo failure, DB failure,
+  storage-level rollback).
+- Wi-Fi setup routes; captive-portal probes; `SECRET_KEY` guard.
+- Sensor service: simulated shape, MAX6675 read, open-circuit fault sample,
+  servo mapping, health (cached, stale fallback, direct-read failure), bus lock.
+- Sensor loop tick: exception survival, fault broadcast, recovery, paused.
 
-- page rendering (dashboard, roast, lookup, lookup edit)
-- roast create/detail/summary APIs
-- roast feedback patch API, missing-roast 404, malformed body 400
-- photo upload: valid type saves to disk, invalid type rejected, oversized rejected, DELETE removes file
-- roast export: portable payload shape, 404 for missing roast
-- roast import: export→import round-trip with fresh id, bare list, missing-field rejection, empty body rejection, no partial save on invalid entry
-- lookup edit page render
-- sensor health endpoint
-- simulated sensor behavior
-- MAX6675 reading behavior
-- servo pulse mapping
-- hardware health reporting
+`PYTHONPATH=. pytest -q` — 80 passed on 2026-11-02.
 
-Latest automated verification:
+## Latest Commits
 
-- `PYTHONPATH=. pytest -q` — 48 passed on 2026-06-01 (export/import + PWA manifest/service-worker tests)
-- Frontend JS (RoR, turn point, toasts) is verified with `node --check`; there is no JS test harness yet.
-
-Latest local commits:
-
-- `0a5385f` Add flame-level tracking and roast seed tooling
-- `6d52b5d` Add Pi provisioning flow and mobile UI polish
-- `05d35aa` Refresh UI with dark glossy theme and fixed roast timeline
-- `eee173e` Add roast editing, deletion, and saved roast metrics
-- current — Fix lookup page origin map: replace inline SVG with Leaflet, load leaflet.js, wire onSelect callback
-
-If you add new hardware features, extend `tests/test_sensor_service.py`.
-If you add new routes or storage behavior, extend `tests/test_app.py`.
+- `ab01e21` Ship the Pi sudoers rules in deploy/ and install them from the service script
+- `7e0a9a8` Escape user-entered text in every innerHTML template
+- `e2501f4` Harden the roast API: strict payload validation, atomic import, limit guard
+- `e3cbd69` Report thermocouple faults as faults instead of fabricating temperatures
+- `ccf0b91` Stop the health check racing the sensor loop on the MAX6675 bus
+- `50f1f06` Make the SECRET_KEY guard real and keep the sensor loop alive on read errors
+- `3ae4381` Keep the full roast curve instead of truncating to MAX_CHART_POINTS
+- `685eb2e` Add persistent flame calibration to the settings page
+- `88865e2` Add settings page: hardware check + flame calibration slider
+- `228ca20` Run the Raspberry Pi direct-AP on hostapd instead of NetworkManager
 
 ## Notes For Future Me
 
-- Read `CLAUDE.md` first — it has the key patterns and gotchas in one place.
-- Read `docs/architecture.md` if you need the system diagram.
-- Read `app/static/js/roast_session.js` if the next task is roast-flow related.
-- Read `app/static/js/origin_map.js` if the next task is map or origin matching related.
-- Read `app/services/sensor_service.py` if the next task is Pi hardware related.
-- Read `app/services/roast_storage.py` if the next task is persistence or schema related.
+- Read `CLAUDE.md` first; then `docs/pi-setup.md` before touching the Pi.
+- Check the Pi's `git log -1` against `origin/master` before starting: work
+  has been committed directly on the Pi before.
+- Roast-flow work: `app/static/js/roast_session.js` and `live_charts.js`.
+- Map or origin matching: `app/static/js/origin_map.js`.
+- Hardware: `app/services/sensor_service.py`, `app/sockets.py`.
+- Persistence or schema: `app/services/roast_storage.py`.

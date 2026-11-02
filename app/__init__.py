@@ -2,7 +2,7 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_socketio import SocketIO
 
 from config import INSECURE_SECRET_KEYS
@@ -57,6 +57,11 @@ def create_app(test_config=None):
 
     from .web.routes import main
     app.register_blueprint(main)
+
+    @app.errorhandler(413)
+    def request_too_large(_error):
+        limit_mb = app.config["MAX_CONTENT_LENGTH"] / (1024 * 1024)
+        return jsonify({"error": f"Request body is too large (limit {limit_mb:g} MB)."}), 413
 
     from .sockets import register_socket_handlers
     register_socket_handlers(app)
