@@ -209,12 +209,16 @@ class SensorService:
             self._pi.write(self.cs_pin, 0)
             time.sleep(0.002)
 
+            # CS low puts D15 on SO and each falling SCK edge shifts out the
+            # next bit, so sample *before* clocking. Clocking first drops D15
+            # and reads every bit one place high, doubling the temperature.
             data = 0
             for _ in range(16):
+                data = (data << 1) | self._pi.read(self.do_pin)
                 self._pi.write(self.clk_pin, 1)
                 time.sleep(0.001)
                 self._pi.write(self.clk_pin, 0)
-                data = (data << 1) | self._pi.read(self.do_pin)
+                time.sleep(0.001)
 
             self._pi.write(self.cs_pin, 1)
 

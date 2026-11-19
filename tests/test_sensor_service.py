@@ -5,21 +5,42 @@ from app.services.sensor_service import SensorService
 
 
 class FakePi:
+    """Models the MAX6675 serial output, not just a bit queue.
+
+    Pulling CS low latches the next 16-bit frame and drives D15 on SO; each
+    falling SCK edge shifts the next bit out (datasheet timing). A reader that
+    clocks before sampling therefore loses D15 and reads every bit one place
+    high, which is exactly the doubled-temperature bug this guards against.
+    """
+
+    CS_PIN = sensor_module.DEFAULT_CS_PIN
+    CLK_PIN = sensor_module.DEFAULT_CLK_PIN
+
     def __init__(self, bits=None, connected=True):
         self.connected = connected
         self.bits = list(bits or [])
         self.modes = []
         self.writes = []
         self.servo_pulsewidths = []
+        self._frame = []
+        self._index = 0
+        self._clk = 0
 
     def set_mode(self, pin, mode):
         self.modes.append((pin, mode))
 
     def write(self, pin, value):
         self.writes.append((pin, value))
+        if pin == self.CS_PIN and value == 0:
+            self._frame, self.bits = self.bits[:16], self.bits[16:]
+            self._index = 0
+        elif pin == self.CLK_PIN:
+            if self._clk == 1 and value == 0:
+                self._index += 1
+            self._clk = value
 
     def read(self, pin):
-        return self.bits.pop(0)
+        return self._frame[self._index] if self._index < len(self._frame) else 0
 
     def set_servo_pulsewidth(self, pin, pulsewidth):
         self.servo_pulsewidths.append((pin, pulsewidth))
