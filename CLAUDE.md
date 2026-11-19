@@ -58,6 +58,7 @@ tests/test_roast_features.py Roast properties, CSV/Artisan exports, ranking repo
 tests/test_roast_math.py     Server-side roast math
 tests/test_request_limits.py Request body cap (MAX_CONTENT_LENGTH) returns JSON 413
 tests/test_bulk_export.py    GET /api/roasts/export backup document + import round trip
+tests/test_check_thermocouple.py  scripts/check_thermocouple.py pass/fail rules + exit codes
 ```
 
 ## Architecture in One Paragraph
@@ -154,7 +155,7 @@ GET  /api/roasts/<id>/export.alog  Artisan profile (dict literal) for File › O
 GET  /api/roasts/export         download every roast as one backup document (?photos=0 to omit photos)
 GET  /api/roasts/report         per-roast statistics for the ranking report (?auc_base=150)
 POST /api/roasts/import         restore one or many roasts from exported JSON
-GET  /api/sensor/health         hardware health check (incl. servo pulse-width range)
+GET  /api/sensor/health         hardware health check (incl. latest °C `temperature`, servo pulse-width range)
 POST /api/sensor/calibration    set + persist servo min/max pulse width (flame endpoints)
 GET  /uploads/<filename>        serve saved photo files
 ```
@@ -165,7 +166,7 @@ GET  /uploads/<filename>        serve saved photo files
 PYTHONPATH=. pytest -q
 ```
 
-Each test gets a fresh temporary instance folder and SQLite file (`tests/conftest.py`), with the background sensor task disabled. 120 tests currently pass. Extend `test_app.py` for new routes or storage behavior, `test_roast_features.py` for properties/exports/report, `test_roast_math.py` for the server-side math, `test_sockets.py` for the sensor loop and safety cutoffs, and `test_sensor_service.py` for hardware mode changes. Frontend roast math lives in `tests/js/*.test.js` (node's built-in runner, invoked by `tests/test_frontend_js.py`); `live_charts.js`, `roast_alarms.js` and `roast_assist.js` export their pure helpers via a `module.exports` guard for this.
+Each test gets a fresh temporary instance folder and SQLite file (`tests/conftest.py`), with the background sensor task disabled. 146 tests currently pass. Extend `test_app.py` for new routes or storage behavior, `test_roast_features.py` for properties/exports/report, `test_roast_math.py` for the server-side math, `test_sockets.py` for the sensor loop and safety cutoffs, and `test_sensor_service.py` for hardware mode changes. Frontend roast math lives in `tests/js/*.test.js` (node's built-in runner, invoked by `tests/test_frontend_js.py`); `live_charts.js`, `roast_alarms.js` and `roast_assist.js` export their pure helpers via a `module.exports` guard for this.
 
 ## Common Gotchas
 
@@ -177,3 +178,4 @@ Each test gets a fresh temporary instance folder and SQLite file (`tests/conftes
 - The Pi cannot reach GitHub. Deploy by pushing from a workstation to a temp ref and fast-forwarding on the Pi (`docs/pi-setup.md` → Deploying Updates).
 - On macOS with the Python 3.9 venv, eventlet's kqueue hub crashes on the first accepted request. `make run` / `dev.sh run` set `EVENTLET_HUB=selects` on Darwin; set it yourself if you run `run.py` directly.
 - In `pigpio` mode a failed thermocouple read is a fault sample (`temperature: null`), never a simulated value. Only a missing pigpio daemon switches the whole source to `simulated`.
+- **MAX6675 bit order:** CS low puts D15 on SO and each *falling* SCK edge shifts the next bit, so `_read_temperature` samples SO **before** pulsing the clock. Clocking first doubled every reading (22 °C room → 44 °C) until Nov 2026. The test `FakePi` models this timing — keep it realistic. After any sensor/wiring change, run `python3 scripts/check_thermocouple.py` on the Pi with the roaster cold (`--expect <room °C>` to pin it; exit 0 pass / 1 fail / 2 unreachable). It reads `/api/sensor/health`, so it never contends for the bus.

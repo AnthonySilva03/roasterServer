@@ -32,6 +32,8 @@ class FakePi:
     def write(self, pin, value):
         self.writes.append((pin, value))
         if pin == self.CS_PIN and value == 0:
+            # Fail loudly on an unexpected extra read instead of returning 0 °C.
+            assert len(self.bits) >= 16, "MAX6675 read with no frame queued"
             self._frame, self.bits = self.bits[:16], self.bits[16:]
             self._index = 0
         elif pin == self.CLK_PIN:
@@ -252,3 +254,98 @@ def test_pigpio_good_read_sample_has_no_error(monkeypatch):
 
     assert sample["temperature"] == 100.0
     assert "error" not in sample
+
+
+# --- MAX6675 decoding regression tests -------------------------------------
+# A MAX6675 frame is D15 = 0, D14..D3 = temperature in 0.25 °C steps,
+# D2 = thermocouple open, D1 = device ID (0), D0 = tri-state.
+
+def max6675_word(celsius, open_circuit=False):
+    return (int(round(celsius / 0.25)) << 3) | (0x4 if open_circuit else 0)
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("celsius", [0.0, 0.25, 21.5, 22.0, 100.0, 196.75, 250.0, 1023.75])
+def test_max6675_reads_exact_temperature_across_range(monkeypatch, celsius):
+    fake_pi = FakePi(bits=bits_for_word(max6675_word(celsius)))
+    sensor = _pigpio_sensor(monkeypatch, fake_pi)
+
+    assert sensor._read_temperature() == celsius
+    assert sensor._last_temperature_error is None
+
+
+def test_room_temperature_is_not_doubled(monkeypatch):
+    # Regression: clocking SCK before sampling SO dropped D15 and shifted every
+    # bit one place high, so a 22 °C room read as 44 °C.
+    fake_pi = FakePi(bits=bits_for_word(max6675_word(22.0)))
+    sensor = _pigpio_sensor(monkeypatch, fake_pi)
+
+    temperature = sensor.read_sample()["temperature"]
+
+    assert temperature == 22.0
+    assert temperature != 44.0
+
+
+def test_reads_sample_bit_before_each_clock_pulse(monkeypatch):
+    class OrderRecordingPi(FakePi):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.events = []
+
+        def write(self, pin, value):
+            if pin == self.CLK_PIN:
+                self.events.append(f"clk{value}")
+            super().write(pin, value)
+
+        def read(self, pin):
+            self.events.append("read")
+            return super().read(pin)
+
+    fake_pi = OrderRecordingPi(bits=bits_for_word(max6675_word(22.0)))
+    sensor = _pigpio_sensor(monkeypatch, fake_pi)
+    fake_pi.events.clear()  # drop the idle-low write from setup
+
+    sensor._read_temperature()
+
+    assert fake_pi.events.count("read") == 16
+    assert fake_pi.events[0] == "read", "D15 is valid as soon as CS falls; read it before clocking"
+    assert fake_pi.events[:3] == ["read", "clk1", "clk0"]
+
+
+@pytest.mark.parametrize("celsius", [22.0, 250.0, 1023.75])
+def test_open_circuit_wins_over_any_temperature_bits(monkeypatch, celsius):
+    fake_pi = FakePi(bits=bits_for_word(max6675_word(celsius, open_circuit=True)))
+    sensor = _pigpio_sensor(monkeypatch, fake_pi)
+
+    sample = sensor.read_sample()
+
+    assert sample["temperature"] is None
+    assert sample["error"] == "Thermocouple open circuit"
+
+
+def test_device_id_and_tristate_bits_do_not_change_temperature(monkeypatch):
+    # D1 and D0 carry no temperature; a reader shifted by one would fold D2/D1
+    # into the value. Set D0 high (tri-state noise) and expect the same reading.
+    fake_pi = FakePi(bits=bits_for_word(max6675_word(21.5) | 0x1))
+    sensor = _pigpio_sensor(monkeypatch, fake_pi)
+
+    assert sensor._read_temperature() == 21.5
+
+
+def test_health_reports_latest_temperature_and_clears_it_on_fault(monkeypatch):
+    fake_pi = FakePi(bits=bits_for_word(max6675_word(21.5)) + bits_for_word(max6675_word(0, open_circuit=True)))
+    sensor = _pigpio_sensor(monkeypatch, fake_pi)
+
+    sensor.read_sample()
+    assert sensor.health_status()["temperature"] == 21.5
+
+    sensor.read_sample()
+    health = sensor.health_status()
+    assert health["temperature"] is None
+    assert health["temperature_ok"] is False
+
+
+def test_simulated_health_has_no_hardware_temperature():
+    assert SensorService(sensor_mode="simulated").health_status()["temperature"] is None

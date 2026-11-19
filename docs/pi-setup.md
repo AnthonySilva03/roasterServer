@@ -193,7 +193,23 @@ ssh pi@<pi-address> sudo -n systemctl restart roaster-server.service   # passwor
 ```
 
 Static files (JS, CSS, the service worker) are served from disk, so a change
-that touches only those needs no restart. Python changes do.
+that touches only those needs no restart. Template and Python changes do.
+
+## Checking the Thermocouple
+
+The unit tests use a fake MAX6675; only a real reading proves the wiring and
+the bit decoding. With the roaster cold (at room temperature), run on the Pi:
+
+```bash
+python3 ~/roasterServer/scripts/check_thermocouple.py              # 5–40 °C is a pass
+python3 ~/roasterServer/scripts/check_thermocouple.py --expect 21  # pin it to the room
+```
+
+It polls `/api/sensor/health` (the sensor loop's latest reading), so it is
+safe while the app is running. It fails on simulated mode, sensor errors,
+readings outside the room range (with a hint when half the value would be
+plausible, the signature of a bit-shift bug) or readings that wander more
+than 2 °C (often a loose wire). Exit status: 0 pass, 1 fail, 2 app unreachable.
 
 ## Backing Up Roasts
 

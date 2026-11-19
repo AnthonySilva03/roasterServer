@@ -62,6 +62,10 @@ class SensorService:
         self._last_read_monotonic = None
         self._pi = self._connect_pigpio()
         self._last_temperature_error = None
+        # Most recent good MAX6675 reading (°C), reported by health_status()
+        # so scripts/check_thermocouple.py can sanity-check the hardware
+        # without bit-banging the bus alongside the sensor loop.
+        self._last_temperature = None
         self._sim_temperature = 202.0
 
     @property
@@ -145,6 +149,7 @@ class SensorService:
             "servo_ok": False,
             "source": self.source_name,
             "last_temperature_error": self._last_temperature_error,
+            "temperature": None,
             "flame_level": self._current_flame_level,
             "servo_min_pulsewidth": self.servo_min_pulsewidth,
             "servo_max_pulsewidth": self.servo_max_pulsewidth,
@@ -171,6 +176,7 @@ class SensorService:
                 self._last_temperature_error = f"Temperature read failed: {error}"
 
         status["temperature_ok"] = self._last_temperature_error is None
+        status["temperature"] = self._last_temperature if status["temperature_ok"] else None
         status["servo_ok"] = True
         status["last_temperature_error"] = self._last_temperature_error
         return status
@@ -224,12 +230,19 @@ class SensorService:
 
         self._last_read_monotonic = time.monotonic()
 
+        return self._decode_max6675(data)
+
+    def _decode_max6675(self, data: int):
+        """Decode a 16-bit MAX6675 frame: D14..D3 = temperature in 0.25 °C
+        steps, D2 = thermocouple input open, D1 = device ID (0), D0 = tri-state."""
         if data & 0x4:
             self._last_temperature_error = "Thermocouple open circuit"
+            self._last_temperature = None
             return None
 
         self._last_temperature_error = None
-        return (data >> 3) * 0.25
+        self._last_temperature = (data >> 3) * 0.25
+        return self._last_temperature
 
     def _next_simulated_value(
         self, attr_name: str, drift: float, lower: float, upper: float
