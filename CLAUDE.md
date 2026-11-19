@@ -173,7 +173,7 @@ Each test gets a fresh temporary instance folder and SQLite file (`tests/conftes
 - The `_originMap` singleton in `origin_map.js` is per-page-load. Calling `renderOriginMarkers` with a different container on the same page will silently reuse the first container.
 - `wifi_service` only exposes the provisioning routes while `WIFI_SETUP_MODE=true`. The dashboard redirects to `/setup/wifi` when that flag is set.
 - `make check` runs `python -m compileall` first — catch syntax errors before pytest.
-- Static files (JS, CSS, `sw.js`) are served from disk, so a deploy that only touches them needs no service restart but does need a `CACHE_VERSION` bump. Python changes need `systemctl restart roaster-server.service`.
+- Static files (JS, CSS, `sw.js`) are served from disk, so a deploy that only touches them needs no service restart but does need a `CACHE_VERSION` bump. Template (`app/templates/*.html`) and Python changes need `systemctl restart roaster-server.service` — Jinja caches compiled templates in production.
 - The Pi cannot reach GitHub. Deploy by pushing from a workstation to a temp ref and fast-forwarding on the Pi (`docs/pi-setup.md` → Deploying Updates).
 - On macOS with the Python 3.9 venv, eventlet's kqueue hub crashes on the first accepted request. `make run` / `dev.sh run` set `EVENTLET_HUB=selects` on Darwin; set it yourself if you run `run.py` directly.
 - In `pigpio` mode a failed thermocouple read is a fault sample (`temperature: null`), never a simulated value. Only a missing pigpio daemon switches the whole source to `simulated`.
