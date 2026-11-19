@@ -347,7 +347,7 @@ function renderReferenceDelta(analytics) {
     }
 
     const deltaTemp = currentTemp - referenceTemp;
-    lcdReferenceDeltaEl.textContent = `${deltaTemp >= 0 ? "+" : ""}${deltaTemp.toFixed(1)} °C`;
+    lcdReferenceDeltaEl.textContent = formatTemperatureDelta(deltaTemp, 1);
     lcdReferenceDeltaEl.classList.toggle("lcd-warn", Math.abs(deltaTemp) >= 5);
 
     // When did the reference first reach the current temperature (after its turn point)?
@@ -378,7 +378,7 @@ function checkReferenceCues() {
         referenceCuesFired.add(index);
         const parts = [`${cue.label} at ${formatDuration(cue.x * 60)}`];
         if (Number.isFinite(cue.temperature)) {
-            parts.push(`${cue.temperature.toFixed(0)} °C`);
+            parts.push(formatTemperature(cue.temperature));
         }
         if (cue.label === "Flame Change" && Number.isFinite(cue.flameLevel)) {
             parts.push(`flame → ${cue.flameLevel}%`);
@@ -416,9 +416,9 @@ function refreshChart() {
 
 function renderLcds(analytics) {
     lcdTemperatureEl.textContent = Number.isFinite(analytics?.currentTemperature)
-        ? analytics.currentTemperature.toFixed(1)
-        : (hasSensorTemperature(latestSensorData) ? Number(latestSensorData.temperature).toFixed(1) : "--.-");
-    lcdRorEl.textContent = Number.isFinite(analytics?.currentRor) ? analytics.currentRor.toFixed(1) : "--";
+        ? formatTempValue(analytics.currentTemperature)
+        : (hasSensorTemperature(latestSensorData) ? formatTempValue(Number(latestSensorData.temperature)) : "--.-");
+    lcdRorEl.textContent = Number.isFinite(analytics?.currentRor) ? toDisplayDelta(analytics.currentRor).toFixed(1) : "--";
     lcdDtrEl.textContent = Number.isFinite(analytics?.phases?.dtr) ? `${analytics.phases.dtr.toFixed(0)}%` : "--";
     renderTimers();
 }
@@ -452,14 +452,14 @@ function renderProjection(analytics) {
     if (!dryEnd && !firstCrack) {
         const seconds = projectSecondsToTemperature(analytics.currentTemperature, settings.dryEndTargetC, analytics.currentRor);
         parts.push(seconds !== null
-            ? `Dry End (${settings.dryEndTargetC} °C) in ~${formatDuration(seconds)} at current RoR`
-            : `Dry End target ${settings.dryEndTargetC} °C`);
+            ? `Dry End (${formatTemperature(settings.dryEndTargetC)}) in ~${formatDuration(seconds)} at current RoR`
+            : `Dry End target ${formatTemperature(settings.dryEndTargetC)}`);
     }
     if (!firstCrack) {
         const seconds = projectSecondsToTemperature(analytics.currentTemperature, settings.firstCrackTargetC, analytics.currentRor);
         parts.push(seconds !== null
-            ? `First Crack (${settings.firstCrackTargetC} °C) in ~${formatDuration(seconds)}`
-            : `First Crack target ${settings.firstCrackTargetC} °C`);
+            ? `First Crack (${formatTemperature(settings.firstCrackTargetC)}) in ~${formatDuration(seconds)}`
+            : `First Crack target ${formatTemperature(settings.firstCrackTargetC)}`);
     } else {
         const development = analytics.phases?.phases?.find((phase) => phase.key === "development");
         if (development) {
@@ -479,9 +479,7 @@ function renderAnalytics() {
     analyticsDurationEl.textContent = formatDuration(analytics.totalDurationSeconds);
     analyticsDevelopmentEl.textContent = formatDuration(analytics.developmentSeconds);
     analyticsDevelopmentRatioEl.textContent = formatPercent(analytics.developmentRatio);
-    analyticsPeakTemperatureEl.textContent = Number.isFinite(analytics.peakTemperature)
-        ? `${analytics.peakTemperature.toFixed(1)} °C`
-        : "--";
+    analyticsPeakTemperatureEl.textContent = formatTemperature(analytics.peakTemperature, 1);
     analyticsRorEl.textContent = formatRate(analytics.currentRor);
     analyticsAucEl.textContent = formatAuc(analytics.auc);
 
@@ -518,7 +516,7 @@ function renderAnalytics() {
         return analytics;
     }
 
-    analyticsCopyEl.textContent = `Development phase is ${formatDuration(analytics.developmentSeconds)} so far with peak temperature at ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`;
+    analyticsCopyEl.textContent = `Development phase is ${formatDuration(analytics.developmentSeconds)} so far with peak temperature at ${formatTemperature(analytics.peakTemperature, 1)}.`;
     return analytics;
 }
 
@@ -537,12 +535,12 @@ function rebuildStageMarkers() {
     if (turningPoint) {
         markers.push({
             label: turningPoint.x,
-            text: `Turn ${turningPoint.temperature.toFixed(0)}°C`,
+            text: `Turn ${formatTemperature(turningPoint.temperature)}`,
             color: "#9b6dff",
         });
         if (!turnPointAlerted) {
             turnPointAlerted = true;
-            notifyRoast("Turn point reached", `${turningPoint.temperature.toFixed(0)} °C — temperature is climbing again.`);
+            notifyRoast("Turn point reached", `${formatTemperature(turningPoint.temperature)} — temperature is climbing again.`);
         }
     }
 
@@ -626,10 +624,10 @@ function clearRoastGraph() {
 function updateLiveTemperature(data) {
     latestSensorData = data;
     temperatureValueEl.textContent = hasSensorTemperature(data)
-        ? `${Number(data.temperature).toFixed(1)} °C`
-        : "-- °C";
+        ? formatTemperature(Number(data.temperature), 1)
+        : `-- ${temperatureUnitLabel()}`;
     if (!roastRecording) {
-        lcdTemperatureEl.textContent = hasSensorTemperature(data) ? Number(data.temperature).toFixed(1) : "--.-";
+        lcdTemperatureEl.textContent = hasSensorTemperature(data) ? formatTempValue(Number(data.temperature)) : "--.-";
     }
     sensorSourceEl.textContent = data.source || "Unknown";
     lastUpdatedEl.textContent = data.timestamp;
@@ -702,8 +700,11 @@ function applyFlameLevel(level, options = {}) {
 
 function fillAssistForm() {
     assistModeEl.value = assistSettings.mode;
-    assistTargetEl.value = assistSettings.targetRor;
-    assistDeadbandEl.value = assistSettings.deadband;
+    // RoR settings are stored in °C/min and shown in the display unit.
+    assistTargetEl.value = displayDeltaInputValue(assistSettings.targetRor);
+    assistDeadbandEl.value = displayDeltaInputValue(assistSettings.deadband);
+    assistTargetEl.max = displayDeltaInputValue(60, 0);
+    assistDeadbandEl.max = displayDeltaInputValue(20, 0);
     assistStepEl.value = assistSettings.stepPercent;
     assistIntervalEl.value = assistSettings.intervalSeconds;
     assistMinEl.value = assistSettings.minFlame;
@@ -713,8 +714,8 @@ function fillAssistForm() {
 function readAssistForm() {
     assistSettings = saveAssistSettings({
         mode: assistModeEl.value,
-        targetRor: assistTargetEl.value,
-        deadband: assistDeadbandEl.value,
+        targetRor: fromDisplayDelta(assistTargetEl.value),
+        deadband: fromDisplayDelta(assistDeadbandEl.value),
         stepPercent: assistStepEl.value,
         intervalSeconds: assistIntervalEl.value,
         minFlame: assistMinEl.value,
@@ -766,7 +767,7 @@ function runFlameAssist(analytics) {
     }
     const manualHold = now - lastManualFlameAt < intervalMs;
     const waiting = now - lastAssistAdjustAt < intervalMs;
-    assistStatusEl.textContent = `Target ${target.toFixed(1)} · RoR ${ror.toFixed(1)}${manualHold ? " · paused after manual move" : ""}`;
+    assistStatusEl.textContent = `Target ${formatRate(target)} · RoR ${formatRate(ror)}${manualHold ? " · paused after manual move" : ""}`;
     if (manualHold || waiting) {
         return;
     }
@@ -777,7 +778,7 @@ function runFlameAssist(analytics) {
         return;
     }
     applyFlameLevel(next, { source: "assist" });
-    assistCopyEl.textContent = `Assist moved the flame to ${next}% at ${formatDuration(elapsedMinutes * 60)} (RoR ${ror.toFixed(1)} vs target ${target.toFixed(1)}).`;
+    assistCopyEl.textContent = `Assist moved the flame to ${next}% at ${formatDuration(elapsedMinutes * 60)} (RoR ${formatRate(ror)} vs target ${formatRate(target)}).`;
 }
 
 [assistModeEl, assistTargetEl, assistDeadbandEl, assistStepEl, assistIntervalEl, assistMinEl, assistMaxEl].forEach((element) => {
@@ -891,7 +892,7 @@ alarmFormEl.addEventListener("submit", (event) => {
     event.preventDefault();
     const alarm = normalizeRoastAlarm({
         source: alarmSourceEl.value,
-        value: alarmValueEl.value,
+        value: alarmValueFromDisplay(alarmSourceEl.value, alarmValueEl.value),
         fromEvent: alarmFromEl.value,
         action: alarmActionEl.value,
         flameLevel: alarmFlameEl.value,
@@ -928,13 +929,13 @@ function buildPendingRoastPayload() {
         endedAt,
     });
     const phaseNotes = (analytics.phases?.phases || []).map((phase) => (
-        `${phase.label}: ${formatDuration(phase.seconds)} (${formatPercent(phase.percent)})${phase.deltaTemp !== null ? `, ${phase.deltaTemp >= 0 ? "+" : ""}${phase.deltaTemp.toFixed(0)} °C` : ""}`
+        `${phase.label}: ${formatDuration(phase.seconds)} (${formatPercent(phase.percent)})${phase.deltaTemp !== null ? `, ${formatTemperatureDelta(phase.deltaTemp)}` : ""}`
     ));
     const analyticsNotes = [
         `Roast duration: ${formatDuration(analytics.totalDurationSeconds)}`,
         `Development time: ${formatDuration(analytics.developmentSeconds)}`,
         `Development ratio: ${formatPercent(analytics.developmentRatio)}`,
-        `Peak temperature: ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}`,
+        `Peak temperature: ${formatTemperature(analytics.peakTemperature, 1)}`,
         ...phaseNotes,
     ].join("\n");
 

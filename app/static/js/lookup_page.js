@@ -68,7 +68,9 @@ function renderRoastProperties(roast) {
         keyTempCard("Colour", roast.roast_color || "--"),
         keyTempCard("Batch", roast.batch_label || "--"),
         keyTempCard("Green moisture", number(roast.green_moisture_percent, "%")),
-        keyTempCard("Ambient", number(roast.ambient_temp_c, " °C")),
+        keyTempCard("Ambient", formatTemperature(
+            roast.ambient_temp_c === null || roast.ambient_temp_c === "" ? null : roast.ambient_temp_c, 1,
+        )),
     ].join("");
 }
 
@@ -332,7 +334,7 @@ function renderLookupEvents(events) {
             </div>
             <div class="history-meta">
                 ${escapeHtml(event.detail || "No details")}<br>
-                ${event.temperature !== null && event.temperature !== undefined ? `Temp ${escapeHtml(Number(event.temperature).toFixed(1))} °C` : ""}
+                ${event.temperature !== null && event.temperature !== undefined ? `Temp ${escapeHtml(formatTemperature(Number(event.temperature), 1))}` : ""}
                 ${event.flame_level !== null && event.flame_level !== undefined ? `<br>Flame ${escapeHtml(event.flame_level)}%` : ""}
             </div>
         </article>
@@ -386,13 +388,11 @@ function setLookupDetail(roast) {
     detailDevelopmentRatioEl.textContent = analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio)
         ? `${analytics.developmentRatio.toFixed(0)}%`
         : "--";
-    detailPeakTemperatureEl.textContent = Number.isFinite(analytics.peakTemperature)
-        ? `${analytics.peakTemperature.toFixed(1)} °C`
-        : "--";
+    detailPeakTemperatureEl.textContent = formatTemperature(analytics.peakTemperature, 1);
     detailRatingEl.textContent = roast.rating ? `${roast.rating}/5` : "Not rated";
     detailTasteNotesEl.textContent = roast.taste_notes || "Taste notes can be added from the post-roast edit page.";
     detailAnalyticsCopyEl.textContent = analytics.developmentSeconds !== null
-        ? `Development lasted ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`
+        ? `Development lasted ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${formatTemperature(analytics.peakTemperature, 1)}.`
         : "First crack was not marked for this roast, so development metrics are incomplete.";
     detailNotesEl.textContent = roast.notes || "No notes recorded.";
     detailAucEl.textContent = formatAuc(analytics.auc);

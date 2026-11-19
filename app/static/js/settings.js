@@ -121,8 +121,8 @@ settingsSocket.on("disconnect", () => {
 
 settingsSocket.on("sensor_data", (data) => {
     tempValueEl.textContent = hasSensorTemperature(data)
-        ? `${Number(data.temperature).toFixed(1)} °C`
-        : "-- °C";
+        ? formatTemperature(Number(data.temperature), 1)
+        : `-- ${temperatureUnitLabel()}`;
     sensorSourceEl.textContent = data.source || "Unknown";
     lastUpdatedEl.textContent = data.timestamp || "--";
 });
@@ -178,20 +178,34 @@ const safetyStateEl = document.getElementById("safetyState");
 const saveRoastSettingsEl = document.getElementById("saveRoastSettings");
 const resetRoastSettingsEl = document.getElementById("resetRoastSettings");
 const roastSettingsMessageEl = document.getElementById("roastSettingsMessage");
+const temperatureUnitEl = document.getElementById("temperatureUnit");
+let lastSafety = null;
+
+// Target inputs are typed in the display unit; their °C bounds follow it.
+const TEMPERATURE_INPUT_BOUNDS_C = [
+    [dryEndTargetEl, 100, 200],
+    [firstCrackTargetEl, 150, 230],
+    [aucBaseEl, 50, 220],
+];
 
 function fillRoastSettingsForm(settings) {
     rorWindowEl.value = settings.rorWindowSeconds;
     rorSmoothingEl.value = settings.rorSmoothingPoints;
-    dryEndTargetEl.value = settings.dryEndTargetC;
-    firstCrackTargetEl.value = settings.firstCrackTargetC;
-    aucBaseEl.value = settings.aucBaseC;
+    dryEndTargetEl.value = displayTempInputValue(settings.dryEndTargetC);
+    firstCrackTargetEl.value = displayTempInputValue(settings.firstCrackTargetC);
+    aucBaseEl.value = displayTempInputValue(settings.aucBaseC);
+    TEMPERATURE_INPUT_BOUNDS_C.forEach(([element, min, max]) => {
+        element.min = displayTempInputValue(min);
+        element.max = displayTempInputValue(max);
+    });
 }
 
 function renderSafety(safety) {
     if (!safety || !safetyMaxTempEl) {
         return;
     }
-    safetyMaxTempEl.textContent = safety.max_bean_temp_c > 0 ? `${safety.max_bean_temp_c} °C` : "disabled";
+    lastSafety = safety;
+    safetyMaxTempEl.textContent = safety.max_bean_temp_c > 0 ? formatTemperature(safety.max_bean_temp_c) : "disabled";
     safetyFaultPolicyEl.textContent = safety.sensor_fault_flame_policy === "min"
         ? `flame to 0% after ${safety.sensor_fault_flame_after} faults`
         : "hold current flame";
@@ -206,9 +220,9 @@ if (saveRoastSettingsEl) {
         const next = {
             rorWindowSeconds: Number(rorWindowEl.value),
             rorSmoothingPoints: Number(rorSmoothingEl.value),
-            dryEndTargetC: Number(dryEndTargetEl.value),
-            firstCrackTargetC: Number(firstCrackTargetEl.value),
-            aucBaseC: Number(aucBaseEl.value),
+            dryEndTargetC: fromDisplayTemp(dryEndTargetEl.value),
+            firstCrackTargetC: fromDisplayTemp(firstCrackTargetEl.value),
+            aucBaseC: fromDisplayTemp(aucBaseEl.value),
         };
         const invalid = Object.entries(next).find(([, value]) => !Number.isFinite(value) || value <= 0);
         if (invalid) {
@@ -227,6 +241,19 @@ if (saveRoastSettingsEl) {
         roastSettingsMessageEl.textContent = "Saved on this device. New roast sessions and saved-roast charts use these values.";
         showToast("Roast settings saved.", "success");
     });
+
+    if (temperatureUnitEl) {
+        temperatureUnitEl.value = getTemperatureUnit();
+        temperatureUnitEl.addEventListener("change", () => {
+            const unit = setTemperatureUnit(temperatureUnitEl.value);
+            // Re-render from the stored °C values so nothing drifts on toggle.
+            fillRoastSettingsForm(getRoastSettings());
+            applyTemperatureUnitLabels();
+            renderSafety(lastSafety);
+            roastSettingsMessageEl.textContent = `Showing temperatures in ${temperatureUnitLabel(unit)} on this device.`;
+            showToast(`Temperature unit set to ${temperatureUnitLabel(unit)}.`, "success");
+        });
+    }
 
     resetRoastSettingsEl.addEventListener("click", () => {
         fillRoastSettingsForm(saveRoastSettings({ ...ROAST_SETTINGS_DEFAULTS }));

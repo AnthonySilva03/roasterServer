@@ -22,10 +22,11 @@ const REPORT_COLUMNS = [
     { key: "first_crack_seconds", label: "FC", format: (v) => dur(v) },
     { key: "development_seconds", label: "Dev", format: (v) => dur(v) },
     { key: "dtr", label: "DTR", format: (v) => pct(v, 0) },
-    { key: "charge_temp", label: "Charge °C", format: (v) => num(v, 0) },
-    { key: "first_crack_temp", label: "FC °C", format: (v) => num(v, 0) },
-    { key: "drop_temp", label: "Drop °C", format: (v) => num(v, 0) },
-    { key: "auc", label: "AUC", format: (v) => num(v, 0) },
+    // "{temp}" columns show the display unit on screen; the CSV keeps raw °C.
+    { key: "charge_temp", label: "Charge {temp}", format: (v) => tempNum(v) },
+    { key: "first_crack_temp", label: "FC {temp}", format: (v) => tempNum(v) },
+    { key: "drop_temp", label: "Drop {temp}", format: (v) => tempNum(v) },
+    { key: "auc", label: "AUC", format: (v) => (v === null || v === undefined || v === "" ? "--" : num(toDisplayDelta(v), 0)) },
     { key: "roast_color", label: "Color", format: (v) => v || "--" },
     { key: "rating", label: "Cup", format: (v) => (v ? `${v}/5` : "--") },
 ];
@@ -36,6 +37,14 @@ let sortDirection = -1;
 
 function num(value, digits) {
     return Number.isFinite(Number(value)) && value !== null && value !== "" ? Number(value).toFixed(digits) : "--";
+}
+
+function tempNum(value) {
+    return value === null || value === undefined || value === "" ? "--" : formatTempValue(value, 0);
+}
+
+function columnLabel(column, unitLabel) {
+    return column.label.replace("{temp}", unitLabel);
 }
 
 function pct(value, digits) {
@@ -79,7 +88,7 @@ function renderHeader() {
     reportHeaderRowEl.innerHTML = REPORT_COLUMNS.map((column) => `
         <th>
             <button type="button" class="report-sort ${column.key === sortKey ? "active" : ""}" data-sort="${escapeHtml(column.key)}">
-                ${escapeHtml(column.label)}${column.key === sortKey ? (sortDirection > 0 ? " ▲" : " ▼") : ""}
+                ${escapeHtml(columnLabel(column, temperatureUnitLabel()))}${column.key === sortKey ? (sortDirection > 0 ? " ▲" : " ▼") : ""}
             </button>
         </th>
     `).join("");
@@ -122,7 +131,7 @@ function renderReport() {
 }
 
 function downloadCsv() {
-    const header = REPORT_COLUMNS.map((column) => column.label);
+    const header = REPORT_COLUMNS.map((column) => columnLabel(column, "°C"));
     const lines = [header, ...sortedRows().map((row) => REPORT_COLUMNS.map((column) => {
         const value = row[column.key];
         return value === null || value === undefined ? "" : String(value);
@@ -141,7 +150,7 @@ function downloadCsv() {
 
 async function loadReport() {
     const settings = getRoastSettings();
-    reportAucBaseEl.textContent = `${settings.aucBaseC} °C`;
+    reportAucBaseEl.textContent = formatTemperature(settings.aucBaseC);
     const response = await fetch(`/api/roasts/report?auc_base=${encodeURIComponent(settings.aucBaseC)}`);
     if (!response.ok) {
         throw new Error("report unavailable");

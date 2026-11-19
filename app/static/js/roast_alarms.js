@@ -13,6 +13,16 @@ const ALARM_SOURCE_LABELS = Object.freeze({
     time_after: "Time ≥",
 });
 
+// Alarm values are stored in °C (temperatures) and °C/min (RoR); the
+// description shows them in the display unit when live_charts.js is loaded.
+const ALARM_SOURCE_KINDS = Object.freeze({
+    temperature_above: "temp",
+    temperature_below: "temp",
+    ror_below: "ror",
+    ror_above: "ror",
+    time_after: "time",
+});
+
 const ALARM_SOURCE_UNITS = Object.freeze({
     temperature_above: "°C",
     temperature_below: "°C",
@@ -20,6 +30,30 @@ const ALARM_SOURCE_UNITS = Object.freeze({
     ror_above: "°C/min",
     time_after: "s",
 });
+
+const hasUnitHelpers = () => typeof toDisplayTemp === "function" && typeof getTemperatureUnit === "function";
+
+// °C value → { text, unit } in the current display unit.
+function alarmDisplayValue(alarm) {
+    const kind = ALARM_SOURCE_KINDS[alarm.source];
+    if (!hasUnitHelpers() || kind === "time") {
+        return { value: alarm.value, unit: ALARM_SOURCE_UNITS[alarm.source] };
+    }
+    const display = kind === "temp" ? toDisplayTemp(alarm.value) : toDisplayDelta(alarm.value);
+    return {
+        value: Number(display.toFixed(1)),
+        unit: kind === "temp" ? temperatureUnitLabel() : rorUnitLabel(),
+    };
+}
+
+// Value typed in the display unit → stored °C value.
+function alarmValueFromDisplay(source, raw) {
+    const kind = ALARM_SOURCE_KINDS[source];
+    if (!hasUnitHelpers() || kind === "time" || !kind) {
+        return raw;
+    }
+    return kind === "temp" ? fromDisplayTemp(raw) : fromDisplayDelta(raw);
+}
 
 const ALARM_FROM_LABELS = Object.freeze({
     charge: "Charge",
@@ -76,7 +110,8 @@ function normalizeRoastAlarm(raw) {
 }
 
 function describeRoastAlarm(alarm) {
-    const condition = `${ALARM_SOURCE_LABELS[alarm.source]} ${alarm.value} ${ALARM_SOURCE_UNITS[alarm.source]}`;
+    const shown = alarmDisplayValue(alarm);
+    const condition = `${ALARM_SOURCE_LABELS[alarm.source]} ${shown.value} ${shown.unit}`;
     const guard = alarm.fromEvent === "any" ? "" : ` from ${ALARM_FROM_LABELS[alarm.fromEvent]}`;
     const action = alarm.action === "flame"
         ? `set flame to ${alarm.flameLevel}%`

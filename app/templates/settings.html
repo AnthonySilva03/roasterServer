@@ -117,9 +117,16 @@ data-servo-max="{{ servo_max_pulsewidth }}"
         <aside class="panel panel-pad detail-stack">
             <div>
                 <h2 class="section-title">Roast Analysis</h2>
-                <p class="helper-text">Rate-of-rise smoothing and the phase target temperatures used for the Dry End / First Crack projections. Stored on this device.</p>
+                <p class="helper-text">Display unit, rate-of-rise smoothing and the phase target temperatures used for the Dry End / First Crack projections. Stored on this device; the unit applies as soon as you pick it, and saved roasts stay in °C underneath.</p>
             </div>
             <div class="summary-grid analytics-grid">
+                <div class="summary-block">
+                    <div class="metric-label">Temperature unit</div>
+                    <select id="temperatureUnit" class="cal-input">
+                        <option value="C">Celsius (°C)</option>
+                        <option value="F">Fahrenheit (°F)</option>
+                    </select>
+                </div>
                 <div class="summary-block">
                     <div class="metric-label">RoR window (seconds)</div>
                     <input id="rorWindow" type="number" min="6" max="180" step="1" class="cal-input">
@@ -129,15 +136,15 @@ data-servo-max="{{ servo_max_pulsewidth }}"
                     <input id="rorSmoothing" type="number" min="1" max="30" step="1" class="cal-input">
                 </div>
                 <div class="summary-block">
-                    <div class="metric-label">Dry End target (°C)</div>
+                    <div class="metric-label">Dry End target (<span data-unit-text="{temp}">°C</span>)</div>
                     <input id="dryEndTarget" type="number" min="100" max="200" step="1" class="cal-input">
                 </div>
                 <div class="summary-block">
-                    <div class="metric-label">First Crack target (°C)</div>
+                    <div class="metric-label">First Crack target (<span data-unit-text="{temp}">°C</span>)</div>
                     <input id="firstCrackTarget" type="number" min="150" max="230" step="1" class="cal-input">
                 </div>
                 <div class="summary-block">
-                    <div class="metric-label">AUC base temperature (°C)</div>
+                    <div class="metric-label">AUC base temperature (<span data-unit-text="{temp}">°C</span>)</div>
                     <input id="aucBase" type="number" min="50" max="220" step="1" class="cal-input">
                 </div>
             </div>
@@ -145,7 +152,7 @@ data-servo-max="{{ servo_max_pulsewidth }}"
                 <button id="saveRoastSettings" class="primary" type="button">Save roast settings</button>
                 <button id="resetRoastSettings" class="ghost" type="button">Reset defaults</button>
             </div>
-            <div id="roastSettingsMessage" class="helper-text">Defaults: 30 s window, 5-sample smoothing, Dry End 150 °C, First Crack 196 °C, AUC base 150 °C.</div>
+            <div id="roastSettingsMessage" class="helper-text">Defaults: 30 s window, 5-sample smoothing, Dry End 150 °C (302 °F), First Crack 196 °C (385 °F), AUC base 150 °C (302 °F).</div>
 
             <div>
                 <h2 class="section-title">Safety Limits</h2>

@@ -35,8 +35,8 @@ let selectedOriginKey = null;
 
 function setDashboardMetrics(data) {
     latestTemperatureEl.textContent = hasSensorTemperature(data)
-        ? `${Number(data.temperature).toFixed(1)} °C`
-        : "-- °C";
+        ? formatTemperature(Number(data.temperature), 1)
+        : `-- ${temperatureUnitLabel()}`;
     dashboardSourceEl.textContent = data.source || "Unknown";
     dashboardUpdatedEl.textContent = data.timestamp;
 }

@@ -19,6 +19,13 @@ const editMoistureInputEl = document.getElementById("editMoistureInput");
 const editAmbientInputEl = document.getElementById("editAmbientInput");
 const editWeightLossEl = document.getElementById("editWeightLoss");
 
+// Ambient temperature is typed in the display unit and stored in °C.
+if (editAmbientInputEl) {
+    editAmbientInputEl.min = displayTempInputValue(-50);
+    editAmbientInputEl.max = displayTempInputValue(80);
+    editAmbientInputEl.placeholder = displayTempInputValue(21);
+}
+
 function numberOrNull(element) {
     const raw = element.value.trim();
     return raw === "" ? null : Number(raw);
@@ -73,7 +80,7 @@ function renderRoastFeedback(roast) {
     editRoastColorInputEl.value = roast.roast_color || "";
     editBatchLabelInputEl.value = roast.batch_label || "";
     editMoistureInputEl.value = asInput(roast.green_moisture_percent);
-    editAmbientInputEl.value = asInput(roast.ambient_temp_c);
+    editAmbientInputEl.value = displayTempInputValue(roast.ambient_temp_c, 1);
     renderEditWeightLoss();
 }
 
@@ -101,7 +108,7 @@ saveTasteFeedbackButtonEl.addEventListener("click", async () => {
         roast_color: editRoastColorInputEl.value.trim(),
         batch_label: editBatchLabelInputEl.value.trim(),
         green_moisture_percent: numberOrNull(editMoistureInputEl),
-        ambient_temp_c: numberOrNull(editAmbientInputEl),
+        ambient_temp_c: editAmbientInputEl.value.trim() === "" ? null : fromDisplayTemp(editAmbientInputEl.value.trim()),
     };
 
     const response = await fetch(`/api/roasts/${roastId}`, {

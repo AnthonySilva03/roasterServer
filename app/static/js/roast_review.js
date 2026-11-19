@@ -34,8 +34,15 @@ const PROPERTY_INPUTS = [
     ["roast_color", reviewRoastColorEl, "text"],
     ["batch_label", reviewBatchLabelEl, "text"],
     ["green_moisture_percent", reviewMoistureEl, "number"],
-    ["ambient_temp_c", reviewAmbientEl, "number"],
+    ["ambient_temp_c", reviewAmbientEl, "temperature"],
 ];
+
+// Ambient temperature is typed in the display unit and stored in °C.
+if (reviewAmbientEl) {
+    reviewAmbientEl.min = displayTempInputValue(-50);
+    reviewAmbientEl.max = displayTempInputValue(80);
+    reviewAmbientEl.placeholder = displayTempInputValue(21);
+}
 
 function renderWeightLoss() {
     const weightIn = Number(pendingRoast?.weight_grams);
@@ -46,8 +53,12 @@ function renderWeightLoss() {
 }
 
 function fillPropertyInputs() {
-    PROPERTY_INPUTS.forEach(([field, element]) => {
+    PROPERTY_INPUTS.forEach(([field, element, type]) => {
         const value = pendingRoast?.[field];
+        if (type === "temperature") {
+            element.value = displayTempInputValue(value, 1);
+            return;
+        }
         element.value = value === null || value === undefined ? "" : String(value);
     });
     renderWeightLoss();
@@ -59,7 +70,9 @@ PROPERTY_INPUTS.forEach(([field, element, type]) => {
             return;
         }
         const raw = element.value.trim();
-        if (type === "number") {
+        if (type === "temperature") {
+            pendingRoast[field] = raw === "" ? null : fromDisplayTemp(raw);
+        } else if (type === "number") {
             pendingRoast[field] = raw === "" ? null : Number(raw);
         } else {
             pendingRoast[field] = raw;
@@ -117,14 +130,12 @@ function renderPendingRoast() {
     reviewDevelopmentRatioEl.textContent = analytics.developmentRatio !== null && Number.isFinite(analytics.developmentRatio)
         ? `${analytics.developmentRatio.toFixed(0)}%`
         : "--";
-    reviewPeakTemperatureEl.textContent = Number.isFinite(analytics.peakTemperature)
-        ? `${analytics.peakTemperature.toFixed(1)} °C`
-        : "--";
+    reviewPeakTemperatureEl.textContent = formatTemperature(analytics.peakTemperature, 1);
     reviewAucEl.textContent = formatAuc(analytics.auc);
     fillPropertyInputs();
     reviewMessageEl.textContent = "Review the roast and choose Save or Cancel.";
     reviewAnalyticsCopyEl.textContent = analytics.developmentSeconds !== null
-        ? `This review includes the graph that will be saved. Development ran ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${Number.isFinite(analytics.peakTemperature) ? `${analytics.peakTemperature.toFixed(1)} °C` : "--"}.`
+        ? `This review includes the graph that will be saved. Development ran ${formatDuration(analytics.developmentSeconds)} and peak temperature reached ${formatTemperature(analytics.peakTemperature, 1)}.`
         : "First crack was not marked, so development metrics are limited for this roast.";
 
     const chartOptions = {

@@ -201,3 +201,41 @@ test("alarms: normalize, describe and evaluate with event gating", () => {
     assert.equal(alarms.evaluateRoastAlarm(timer, { ...base, now: new Date(at(119)) }), false);
     assert.equal(alarms.evaluateRoastAlarm(timer, { ...base, now: new Date(at(120)) }), true);
 });
+
+test("temperature unit helpers convert absolute values and deltas separately", () => {
+    assert.equal(charts.getTemperatureUnit(), "C"); // no localStorage under node
+    assert.equal(charts.toDisplayTemp(100, "F"), 212);
+    assert.equal(charts.toDisplayTemp(0, "F"), 32);
+    assert.equal(charts.toDisplayTemp(196, "C"), 196);
+    assert.equal(charts.fromDisplayTemp(212, "F"), 100);
+    assert.ok(Math.abs(charts.fromDisplayTemp(charts.toDisplayTemp(187.3, "F"), "F") - 187.3) < 1e-9);
+    assert.equal(charts.toDisplayDelta(10, "F"), 18);
+    assert.equal(charts.fromDisplayDelta(18, "F"), 10);
+    assert.equal(charts.toDisplayTemp(null, "F"), null);
+    assert.equal(charts.fromDisplayTemp("", "F"), null);
+    assert.equal(charts.toDisplayDelta(undefined, "F"), null);
+});
+
+test("temperature formatters label the unit and keep -- for missing values", () => {
+    assert.equal(charts.formatTemperature(200, 0, "F"), "392 °F");
+    assert.equal(charts.formatTemperature(200, 1, "C"), "200.0 °C");
+    assert.equal(charts.formatTemperature(null, 0, "F"), "--");
+    assert.equal(charts.formatTemperatureDelta(-5, 0, "F"), "-9 °F");
+    assert.equal(charts.formatTemperatureDelta(12, 0, "C"), "+12 °C");
+    assert.equal(charts.formatTempValue(150, 1, "F"), "302.0");
+    assert.equal(charts.rorUnitLabel("F"), "°F/min");
+    assert.equal(charts.temperatureUnitLabel("C"), "°C");
+    assert.equal(charts.formatRate(10), "10.0 °C/min");
+});
+
+test("niceTickStep picks round steps for the Fahrenheit axis", () => {
+    assert.equal(charts.niceTickStep(450), 100);
+    assert.equal(charts.niceTickStep(36), 10);
+    assert.equal(charts.niceTickStep(27), 5);
+    assert.equal(charts.niceTickStep(120), 20);
+});
+
+test("alarm descriptions fall back to stored °C units without the chart helpers", () => {
+    const alarm = alarms.normalizeRoastAlarm({ source: "temperature_above", value: 190, fromEvent: "firstCrack" });
+    assert.match(alarms.describeRoastAlarm(alarm), /Bean temp ≥ 190 °C from First Crack/);
+});

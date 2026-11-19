@@ -36,12 +36,12 @@ data-reference-id="{{ reference_id }}"
         <div class="lcd">
             <div class="metric-label">Bean Temp</div>
             <div id="lcdTemperature" class="lcd-value">--.-</div>
-            <div class="lcd-unit">°C</div>
+            <div class="lcd-unit" data-unit-text="{temp}">°C</div>
         </div>
         <div class="lcd">
             <div class="metric-label">Rate of Rise</div>
             <div id="lcdRor" class="lcd-value">--</div>
-            <div class="lcd-unit">°C/min</div>
+            <div class="lcd-unit" data-unit-text="{ror}">°C/min</div>
         </div>
         <div class="lcd">
             <div class="metric-label">Since Charge</div>
@@ -164,11 +164,11 @@ data-reference-id="{{ reference_id }}"
                     </select>
                 </label>
                 <label>
-                    Target RoR (°C/min)
+                    Target RoR (<span data-unit-text="{ror}">°C/min</span>)
                     <input id="assistTarget" type="number" min="0" max="60" step="0.5">
                 </label>
                 <label>
-                    Dead band (°C/min)
+                    Dead band (<span data-unit-text="{ror}">°C/min</span>)
                     <input id="assistDeadband" type="number" min="0" max="20" step="0.5">
                 </label>
                 <label>
@@ -221,10 +221,10 @@ data-reference-id="{{ reference_id }}"
                     <label>
                         When
                         <select id="alarmSource">
-                            <option value="temperature_above">Bean temp reaches (°C)</option>
-                            <option value="temperature_below">Bean temp falls below (°C)</option>
-                            <option value="ror_below">Rate of rise falls below (°C/min)</option>
-                            <option value="ror_above">Rate of rise rises above (°C/min)</option>
+                            <option value="temperature_above" data-unit-text="Bean temp reaches ({temp})">Bean temp reaches (°C)</option>
+                            <option value="temperature_below" data-unit-text="Bean temp falls below ({temp})">Bean temp falls below (°C)</option>
+                            <option value="ror_below" data-unit-text="Rate of rise falls below ({ror})">Rate of rise falls below (°C/min)</option>
+                            <option value="ror_above" data-unit-text="Rate of rise rises above ({ror})">Rate of rise rises above (°C/min)</option>
                             <option value="time_after">Time after event reaches (seconds)</option>
                         </select>
                     </label>
@@ -271,7 +271,7 @@ data-reference-id="{{ reference_id }}"
                 <div class="metric-label">How alarms work</div>
                 <div class="detail-copy">
                     Conditions are checked on every sensor sample. "Active from" delays the alarm until that event is marked,
-                    so a 190 °C alarm from First Crack will not fire during drying. "Set flame" moves the servo and logs the change
+                    so a 190 °C (374 °F) alarm from First Crack will not fire during drying. "Set flame" moves the servo and logs the change
                     as a roast event. Speech uses the browser's voice, so it works offline.
                 </div>
             </div>

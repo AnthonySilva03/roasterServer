@@ -42,6 +42,168 @@ function saveRoastSettings(partial) {
 }
 
 // ---------------------------------------------------------------------------
+// Display temperature unit (localStorage, per device). Everything is measured,
+// stored, exported and computed in °C; only what the user sees and types is
+// converted. Absolute temperatures use toDisplayTemp/fromDisplayTemp, while
+// differences and rates (ΔT, RoR, AUC) scale by 9/5 with no offset.
+// ---------------------------------------------------------------------------
+const TEMPERATURE_UNIT_KEY = "roasterTemperatureUnit";
+
+function getTemperatureUnit() {
+    try {
+        const raw = typeof localStorage !== "undefined" ? localStorage.getItem(TEMPERATURE_UNIT_KEY) : null;
+        return raw === "F" ? "F" : "C";
+    } catch (error) {
+        return "C";
+    }
+}
+
+function setTemperatureUnit(unit) {
+    const next = unit === "F" ? "F" : "C";
+    try {
+        localStorage.setItem(TEMPERATURE_UNIT_KEY, next);
+    } catch (error) {
+        // Unavailable storage just keeps the °C default.
+    }
+    return next;
+}
+
+function temperatureUnitLabel(unit = getTemperatureUnit()) {
+    return unit === "F" ? "°F" : "°C";
+}
+
+function rorUnitLabel(unit = getTemperatureUnit()) {
+    return `${temperatureUnitLabel(unit)}/min`;
+}
+
+function toDisplayTemp(celsius, unit = getTemperatureUnit()) {
+    const value = Number(celsius);
+    if (celsius === null || celsius === undefined || !Number.isFinite(value)) {
+        return null;
+    }
+    return unit === "F" ? (value * 9) / 5 + 32 : value;
+}
+
+function fromDisplayTemp(display, unit = getTemperatureUnit()) {
+    const value = Number(display);
+    if (display === null || display === undefined || display === "" || !Number.isFinite(value)) {
+        return null;
+    }
+    return unit === "F" ? ((value - 32) * 5) / 9 : value;
+}
+
+function toDisplayDelta(celsiusDelta, unit = getTemperatureUnit()) {
+    const value = Number(celsiusDelta);
+    if (celsiusDelta === null || celsiusDelta === undefined || !Number.isFinite(value)) {
+        return null;
+    }
+    return unit === "F" ? (value * 9) / 5 : value;
+}
+
+function fromDisplayDelta(displayDelta, unit = getTemperatureUnit()) {
+    const value = Number(displayDelta);
+    if (displayDelta === null || displayDelta === undefined || displayDelta === "" || !Number.isFinite(value)) {
+        return null;
+    }
+    return unit === "F" ? (value * 5) / 9 : value;
+}
+
+// Number only (no unit), for LCD readouts and inputs. "--" when missing.
+function formatTempValue(celsius, digits = 1, unit = getTemperatureUnit()) {
+    const value = toDisplayTemp(celsius, unit);
+    return value === null ? "--" : value.toFixed(digits);
+}
+
+// Rounds a °C value to a tidy number in the display unit, for prefilling inputs.
+function displayTempInputValue(celsius, digits = 0, unit = getTemperatureUnit()) {
+    const value = toDisplayTemp(celsius, unit);
+    return value === null ? "" : String(Number(value.toFixed(digits)));
+}
+
+function displayDeltaInputValue(celsiusDelta, digits = 1, unit = getTemperatureUnit()) {
+    const value = toDisplayDelta(celsiusDelta, unit);
+    return value === null ? "" : String(Number(value.toFixed(digits)));
+}
+
+function formatTemperatureDelta(celsiusDelta, digits = 0, unit = getTemperatureUnit()) {
+    const value = toDisplayDelta(celsiusDelta, unit);
+    if (value === null) {
+        return "--";
+    }
+    return `${value >= 0 ? "+" : ""}${value.toFixed(digits)} ${temperatureUnitLabel(unit)}`;
+}
+
+// Fills static unit text in templates: any element with data-unit-text gets
+// its text replaced, with {temp} → °C/°F and {ror} → °C/min or °F/min.
+function applyTemperatureUnitLabels(root = typeof document !== "undefined" ? document : null) {
+    if (!root?.querySelectorAll) {
+        return;
+    }
+    const unit = getTemperatureUnit();
+    root.querySelectorAll("[data-unit-text]").forEach((element) => {
+        element.textContent = element.dataset.unitText
+            .replace(/\{temp\}/g, temperatureUnitLabel(unit))
+            .replace(/\{ror\}/g, rorUnitLabel(unit));
+    });
+}
+
+if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => applyTemperatureUnitLabels());
+    } else {
+        applyTemperatureUnitLabels();
+    }
+}
+
+// Chart.js tick builder: places ticks at round numbers in the display unit
+// while the data itself stays in °C.
+function niceTickStep(span, targetCount = 6) {
+    const raw = span / Math.max(1, targetCount);
+    const magnitude = 10 ** Math.floor(Math.log10(raw || 1));
+    const normalized = raw / magnitude;
+    const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+    return nice * magnitude;
+}
+
+function buildDisplayUnitTicks(scale, kind) {
+    const unit = getTemperatureUnit();
+    if (unit === "C") {
+        return;
+    }
+    const toDisplay = kind === "delta" ? toDisplayDelta : toDisplayTemp;
+    const fromDisplay = kind === "delta" ? fromDisplayDelta : fromDisplayTemp;
+    const low = toDisplay(scale.min, unit);
+    const high = toDisplay(scale.max, unit);
+    if (low === null || high === null || high <= low) {
+        return;
+    }
+    const step = niceTickStep(high - low);
+    const ticks = [];
+    for (let value = Math.ceil(low / step) * step; value <= high + step * 1e-6; value += step) {
+        ticks.push({ value: fromDisplay(Number(value.toFixed(6)), unit) });
+    }
+    if (ticks.length >= 2) {
+        scale.ticks = ticks;
+    }
+}
+
+function temperatureAxisOptions(kind, base = {}) {
+    return {
+        ...base,
+        afterBuildTicks(scale) {
+            buildDisplayUnitTicks(scale, kind);
+        },
+        ticks: {
+            ...(base.ticks || {}),
+            callback(value) {
+                const display = kind === "delta" ? toDisplayDelta(value) : toDisplayTemp(value);
+                return display === null ? "" : String(Number(display.toFixed(1)));
+            },
+        },
+    };
+}
+
+// ---------------------------------------------------------------------------
 // Roast events. Labels are what gets stored; roles let analytics accept the
 // legacy "Start"/"Finish" labels from roasts saved before Charge/Drop existed.
 // ---------------------------------------------------------------------------
@@ -231,6 +393,13 @@ function createChartDefaults() {
             legend: {
                 display: false,
             },
+            tooltip: {
+                callbacks: {
+                    label(context) {
+                        return formatChartTooltipLabel(context);
+                    },
+                },
+            },
             stageMarkers: {
                 markers: [],
                 badges: [],
@@ -260,7 +429,7 @@ function createChartDefaults() {
                     color: "rgba(226, 235, 255, 0.72)",
                 },
             },
-            y: {
+            y: temperatureAxisOptions("absolute", {
                 grid: {
                     color: "rgba(194, 219, 255, 0.1)",
                 },
@@ -269,12 +438,29 @@ function createChartDefaults() {
                 },
                 title: {
                     display: true,
-                    text: "Temperature (°C)",
+                    text: `Temperature (${temperatureUnitLabel()})`,
                     color: "rgba(226, 235, 255, 0.72)",
                 },
-            },
+            }),
         },
     };
+}
+
+// Tooltip values are stored in °C; show them in the display unit.
+function formatChartTooltipLabel(context) {
+    const role = context?.dataset?.roasterRole;
+    const y = context?.parsed?.y;
+    const label = context?.dataset?.label || "";
+    if (!Number.isFinite(y)) {
+        return label;
+    }
+    if (role === "ror") {
+        return `${label}: ${toDisplayDelta(y).toFixed(1)} ${rorUnitLabel()}`;
+    }
+    if (role === "flame" || role === "referenceFlame") {
+        return `${label}: ${Math.round(y)}%`;
+    }
+    return `${label}: ${toDisplayTemp(y).toFixed(1)} ${temperatureUnitLabel()}`;
 }
 
 function formatMinutesTick(value) {
@@ -385,7 +571,7 @@ function enableRorOverlay(chart, options = {}) {
         yAxisID: "y1",
     });
 
-    chart.options.scales.y1 = {
+    chart.options.scales.y1 = temperatureAxisOptions("delta", {
         type: "linear",
         position: "right",
         beginAtZero: true,
@@ -398,10 +584,10 @@ function enableRorOverlay(chart, options = {}) {
         },
         title: {
             display: true,
-            text: "RoR (°C/min)",
+            text: `RoR (${rorUnitLabel()})`,
             color: "rgba(150, 214, 130, 0.8)",
         },
-    };
+    });
 
     chart.update();
     return chart;
@@ -593,7 +779,7 @@ function formatRate(value) {
         return "--";
     }
 
-    return `${value.toFixed(1)} °C/min`;
+    return `${toDisplayDelta(value).toFixed(1)} ${rorUnitLabel()}`;
 }
 
 function formatPercent(value) {
@@ -1019,8 +1205,8 @@ function renderPhaseSummary(containerEl, phaseSummary) {
             <span class="phase-name">${escapeHtml(phase.label)}${phase.open ? " (so far)" : ""}</span>
             <span class="phase-stat">${escapeHtml(formatDuration(phase.seconds))}</span>
             <span class="phase-stat">${escapeHtml(formatPercent(phase.percent))}</span>
-            <span class="phase-stat">${phase.deltaTemp !== null ? `${phase.deltaTemp >= 0 ? "+" : ""}${escapeHtml(phase.deltaTemp.toFixed(0))} °C` : "--"}</span>
-            <span class="phase-stat">${Number.isFinite(phase.avgRor) ? `${escapeHtml(phase.avgRor.toFixed(1))} °C/min` : "--"}</span>
+            <span class="phase-stat">${escapeHtml(formatTemperatureDelta(phase.deltaTemp))}</span>
+            <span class="phase-stat">${escapeHtml(formatRate(phase.avgRor))}</span>
         </div>
     `).join("");
 
@@ -1090,11 +1276,12 @@ function buildRoastAnalytics(curve = [], events = [], options = {}) {
 }
 
 function formatAuc(value) {
-    return Number.isFinite(value) ? `${value.toFixed(0)} °C·min` : "--";
+    return Number.isFinite(value) ? `${toDisplayDelta(value).toFixed(0)} ${temperatureUnitLabel()}·min` : "--";
 }
 
-function formatTemperature(value, digits = 0) {
-    return Number.isFinite(value) ? `${value.toFixed(digits)} °C` : "--";
+function formatTemperature(value, digits = 0, unit = getTemperatureUnit()) {
+    const display = toDisplayTemp(value, unit);
+    return display === null ? "--" : `${display.toFixed(digits)} ${temperatureUnitLabel(unit)}`;
 }
 
 // True when a sensor_data payload carries a real reading. Fault samples from
@@ -1140,6 +1327,20 @@ if (typeof module !== "undefined" && module.exports) {
         buildRoastAnalytics,
         formatDuration,
         formatMinutesTick,
+        getTemperatureUnit,
+        setTemperatureUnit,
+        temperatureUnitLabel,
+        rorUnitLabel,
+        toDisplayTemp,
+        fromDisplayTemp,
+        toDisplayDelta,
+        fromDisplayDelta,
+        formatTemperature,
+        formatTemperatureDelta,
+        formatTempValue,
+        formatRate,
+        formatAuc,
+        niceTickStep,
         hasSensorTemperature,
         escapeHtml,
     };
